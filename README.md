@@ -5,7 +5,7 @@ A library to cluster, analyse, and potentially forecast cell location
 ----------------------------------
 ## Installation
 
-Then create the `Cellgroup` environment using
+Then create the `Cellgroup` environment using:
 
 ```bash
 conda env create -f Cellgroup.yml
