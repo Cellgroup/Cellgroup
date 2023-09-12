@@ -58,10 +58,12 @@ The library can be configured from a set of environment variables.
 
 | Variable       | Description                                                     |
 |----------------|-----------------------------------------------------------------|
-| `N_OPT_JOBS`     | Number of cores to use for hyperparameter search. Default : 1 |
-| `N_LEARNER_JOBS` | Number of cores to use by inidividual learners. Default: all cpus      |
-| `REDIS_HOST`     | IP address for the Redis database. Default 127.0.0.1            |
-| `REDIS_PORT`     | Redis port. Default: 6379                                       |
+| `all_clusters`     | Possibility to see several clustering methods |
+| `density_clusters` | Cluster cells through Cython      |
+| `time_clustering`     | Generates an analysis of points based on time points            |
+| `plot_see_watch`     | Generate a google drive folder where there are png, pdf and video of how clusters evolve over time                                      |
+| `clustering_analysis`     | Perform statistical studies on clusters                                       |
+| `clusters_impute`     | Impute clusters and cells                                       |
 
 _Example_: `export N_OPT_JOBS = 2` to use 2 cores for hyperparam search.
 
