@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Literal, Optional, Sequence, Union
+from warnings import warn
 
 import tifffile as tiff
 import numpy as np
@@ -50,8 +51,19 @@ def get_fnames(
             curr_fnames = [
                 fname for fname in os.listdir(well_subdir) if channel_id.value in fname
             ]
+            # --- select timesteps
             curr_fnames = _sort_files_by_time(curr_fnames)
-            curr_fnames = curr_fnames[:t_steps] if t_steps else curr_fnames
+            if t_steps:
+                if t_steps > len(curr_fnames):
+                    warn(
+                        message=(
+                            f"You picked {t_steps} timesteps with only"
+                            f" {len(curr_fnames)} available. Taking all of them."
+                        ),
+                        stacklevel=2,
+                    )
+                curr_fnames = curr_fnames[:t_steps]
+            # --- append to dict
             fnames_dict[well_id.name][channel_id.name] = [
                 Path(os.path.join(well_subdir, fname)) for fname in curr_fnames
             ]
@@ -97,7 +109,7 @@ def load_images(
     return images_dict
 
 
-# if __name__ == "__main__":
-#     # Test the function
-#     DATA_DIR = "/group/jug/federico/data/Cellgroup/"
-#     res = load_images(DATA_DIR, [WellID.A06], [ChannelID.Ch1], t_steps=5)
+if __name__ == "__main__":
+    # Test the function
+    DATA_DIR = "/group/jug/federico/data/Cellgroup/"
+    res = get_fnames(DATA_DIR, [WellID.A06], [ChannelID.Ch2], t_steps=5)
