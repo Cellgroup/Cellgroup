@@ -1,3 +1,4 @@
+# TODO: replace with pyproject.toml
 from setuptools import setup, find_packages
 
 setup(
