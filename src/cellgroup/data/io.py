@@ -49,7 +49,7 @@ def get_fnames(
     subdir = "slices" if img_dim == "2D" else "stacks"
     fnames_dict = {}
     for well_id in well_ids:
-        fnames_dict[well_id.name] = {}
+        fnames_dict[well_id] = {}
         well_subdir = os.path.join(data_dir, subdir, well_id.value)
         for channel_id in channel_ids:
             curr_fnames = [
@@ -71,7 +71,7 @@ def get_fnames(
             if every_n_steps:
                 curr_fnames = curr_fnames[::every_n_steps]
             # --- append to dict
-            fnames_dict[well_id.name][channel_id.name] = [
+            fnames_dict[well_id][channel_id] = [
                 Path(os.path.join(well_subdir, fname)) for fname in curr_fnames
             ]
     return fnames_dict
