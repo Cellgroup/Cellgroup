@@ -17,6 +17,7 @@ def get_fnames(
     channel_ids: Sequence[ChannelID],
     img_dim: Literal["2D", "3D"] = "2D",
     t_steps: Optional[int] = None,
+    every_n_steps: Optional[int] = None,
 ) -> dict[WellID, dict[ChannelID, list[Path]]]:
     """Get the filenames for the given wells and channels.
     
@@ -31,6 +32,9 @@ def get_fnames(
     img_dim : Literal["2D", "3D"]
         The dimensionality of the images. By default "2D".
     t_steps : Optional[int]
+        The number of time steps to include.
+        If None, all time steps are taken. By default None.
+    every_n_steps : Optional[int]
         The number of time steps to include.
         If None, all time steps are taken. By default None.
     
@@ -63,6 +67,9 @@ def get_fnames(
                         stacklevel=2,
                     )
                 curr_fnames = curr_fnames[:t_steps]
+            # --- subsample timesteps
+            if every_n_steps:
+                curr_fnames = curr_fnames[::every_n_steps]
             # --- append to dict
             fnames_dict[well_id.name][channel_id.name] = [
                 Path(os.path.join(well_subdir, fname)) for fname in curr_fnames
@@ -76,6 +83,7 @@ def load_images(
     channel_ids: Sequence[ChannelID],
     img_dim: Literal["2D", "3D"] = "2D",
     t_steps: Optional[int] = None,
+    every_n_steps: Optional[int] = None,
 ) -> dict[WellID, dict[ChannelID, NDArray]]:
     """Load an image from a file.
     
@@ -92,13 +100,23 @@ def load_images(
     t_steps : Optional[int]
         The number of time steps to include.
         If None, all time steps are taken. By default None.
+    every_n_steps : Optional[int]
+        The number of time steps to include.
+        If None, all time steps are taken. By default None.
     
     Returns
     -------
     dict[WellID, dict[ChannelID, NDArray]]
         The loaded images, organized by well and channel.
     """
-    fnames_dict = get_fnames(data_dir, well_ids, channel_ids, img_dim, t_steps)
+    fnames_dict = get_fnames(
+        data_dir=data_dir, 
+        well_ids=well_ids, 
+        channel_ids=channel_ids, 
+        img_dim=img_dim, 
+        t_steps=t_steps, 
+        every_n_steps=every_n_steps
+    )
     images_dict = {}
     for well_id, channel_dict in fnames_dict.items():
         images_dict[well_id] = {}
@@ -107,9 +125,3 @@ def load_images(
             imgs = [tiff.imread(fname) for fname in tqdm(fnames, desc=msg)]
             images_dict[well_id][channel_id] = np.stack(imgs)
     return images_dict
-
-
-if __name__ == "__main__":
-    # Test the function
-    DATA_DIR = "/group/jug/federico/data/Cellgroup/"
-    res = get_fnames(DATA_DIR, [WellID.A06], [ChannelID.Ch2], t_steps=5)
