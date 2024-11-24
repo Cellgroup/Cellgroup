@@ -8,7 +8,8 @@ import xarray as xr
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
 
-from cellgroup.data.datasets.harvard import get_fnames
+from cellgroup.data.config import DatasetConfig
+from cellgroup.data.utils import Axis
 
 
 class InMemoryDataset(Dataset):
@@ -24,7 +25,9 @@ class InMemoryDataset(Dataset):
     def __init__(
         self,
         data_dir: Path,
+        data_config: DatasetConfig,
         get_fnames_fn: Callable,
+        # TODO: in case of synthetic data we need to pass a different function
     ):
         """Initialize the dataset.
 
@@ -34,12 +37,25 @@ class InMemoryDataset(Dataset):
             The directory containing the data.
         """
         self.data_dir = data_dir
-        self.fnames = get_fnames_fn(data_dir)
+        self.data_config = data_config
+        self.dims = self._get_dims()
+        self.fnames = get_fnames_fn(data_dir, **self.data_config.model_dump())
         self.data = self._load_data()
-
+        self.patches = self._prepare_patches()
+        
+    def _get_dims(self) -> Sequence[Axis]:
+        """Get the dimensions of the data."""
+        if self.data_config.img_dim == "2D":
+            return [Axis.N, Axis.C, Axis.T, Axis.Y, Axis.X]
+        elif self.data_config.img_dim == "3D":
+            return [Axis.N, Axis.C, Axis.T, Axis.Z, Axis.Y, Axis.X]
+        else:
+            raise ValueError(f"Unsupported image dimension {self.data_config.img_dim}")
+        
+    
     def _load_img(self, fname: Path) -> NDArray:
         if self.ext == ".tif":
-            return tiff.imread(self.fname)
+            return tiff.imread(fname)
         else:
             raise ValueError(f"Unsupported file extension {self.ext}")
     
@@ -49,15 +65,27 @@ class InMemoryDataset(Dataset):
         Returns
         -------
         xr.DataArray
-            The loaded data. Shape is (N, T, C, Z, Y, X).
+            The loaded data. Shape is (N, C, T, [Z], Y, X).
         """
         data = []
+        coords = {Axis.N: [], Axis.C: [], Axis.T: []}
         self.ext = self.fnames[0].suffix
-        for fname in self.fnames:
-            img = self._load_img(fname)
-            data.append(img)
-        data = xr.DataArray(np.stack(data))
-        return data
+        for sample in self.fnames.keys():
+            for channel in self.fnames[sample].keys():
+                for fname in self.fnames[sample][channel]:
+                    img = self._load_img(fname)
+                    coords[Axis.N].append(sample)
+                    coords[Axis.C].append(channel)
+                    # TODO: add time information
+                    data.append(img)
+        return xr.DataArray(
+            np.stack(data), 
+            coords=coords,
+            dims=self.dims
+        )
+        
+    def _prepare_patches(self) -> xr.DataArray:
+        """Prepare the data for patch-based training."""
 
     def preprocess(self, data: xr.DataArray) -> xr.DataArray:
         """Preprocess the data.

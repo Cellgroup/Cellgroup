@@ -10,8 +10,9 @@ import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 
+from cellgroup.data.utils import SampleID, ChannelID
 
-class SampleID(Enum):
+class SampleIDHarvard(SampleID):
     """IDs for the different samples in the dataset.
     
     NOTE: each sample is a well in the experiment.
@@ -22,14 +23,14 @@ class SampleID(Enum):
     A08 = "_A08_"
     A09 = "_A09_"
     
-class ChannelID(Enum):
+class ChannelIDHarvard(ChannelID):
     """IDs for the different channels in the dataset."""
     Ch1 = "C01"
     Ch2 = "C02"
     Ch5 = "C05"
     Ch6 = "C06"
     Ch13 = "C13"
-    
+
 
 def _sort_files_by_time(files: list[str]) -> list[str]:
     """Sort a list of filenames based on the day and time step encoded in their names.
@@ -141,7 +142,6 @@ def get_fnames(
     """
     assert img_dim == "2D", "Only 2D images are supported for now."
     assert SampleID.A05 not in sample_ids, "Well A05 not available in the dataset for now."
-    assert len(t_steps_subsample) >= 2, "You need to provide at least (start, end)."
     
     subdir = "slices" if img_dim == "2D" else "stacks"
     fnames_dict = {}
