@@ -10,3 +10,10 @@ class Axis(Enum):
     N = "n"
     
     
+class SampleID(Enum):
+    """IDs for the different samples in the dataset."""
+    pass
+    
+class ChannelID(Enum):
+    """IDs for the different channels in the dataset."""
+    pass
