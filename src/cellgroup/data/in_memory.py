@@ -1,6 +1,5 @@
-import os
 from pathlib import Path
-from typing import Callable, Sequence, Union
+from typing import Callable, Sequence
 
 import numpy as np
 import tifffile as tiff
@@ -36,6 +35,10 @@ class InMemoryDataset(Dataset):
         ----------
         data_dir : Path
             The directory containing the data.
+        data_config : DatasetConfig
+            Configuration for the dataset.
+        get_fnames_fn : Callable
+            Function to get the filenames to load from the data directory.
         """
         self.data_dir = data_dir
         self.data_config = data_config
@@ -86,16 +89,33 @@ class InMemoryDataset(Dataset):
         )
     
     def _get_data_stats(self) -> dict:
-        """Get statistics about the data."""
-        pass
+        """Get statistics about the data.
         
-    def _prepare_patches(self) -> xr.DataArray:
-        """Prepare the data for patch-based training."""
+        NOTE: statistics are computed per channel on the entire dataset.
+        
+        Returns
+        -------
+        dict
+            Data statistics stored in a dict, whose keys are "mean" and "std".
+        """
+        return {
+            "mean": self.data.mean(dim=self.dims),
+            "std": self.data.std(dim=self.dims),
+        }
+        
+        
+    def _prepare_patches(self) -> NDArray:
+        """Prepare the data for patch-based training.
+        
+        Returns
+        -------
+        NDArray
+            The data in patch form. Shape is (N, n_patches, C, T, [Z'], Y', X').
+        """
         return extract_sequential_patches(
-            data=self.data,
+            data=self.data.values,
             patch_size=self.data_config.patch_size,
         )
-        
         
 
     def preprocess(self, data: xr.DataArray) -> xr.DataArray:
@@ -114,7 +134,7 @@ class InMemoryDataset(Dataset):
         return data
     
     def __len__(self):
-        return len(self.data)
+        return self.data.sizes[Axis.N]
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        return self.patches[idx]
