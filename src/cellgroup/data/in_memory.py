@@ -128,18 +128,21 @@ class InMemoryDataset(Dataset):
         }
         
         
-    def _prepare_patches(self) -> NDArray:
+    def _prepare_patches(self) -> xr.DataArray:
         """Prepare the data for patch-based training.
         
         Returns
         -------
-        NDArray
-            The data in patch form. Shape is (N, n_patches, C, T, [Z'], Y', X').
+        xr.DataArray
+            The data in patch form. Shape is (n_patches, C, T, [Z'], Y', X').
         """
-        return extract_sequential_patches(
+        patches = extract_sequential_patches(
             data=self.data.values,
             patch_size=self.data_config.patch_size,
         )
+        new_dims = self.dims.copy()
+        new_dims[0] = "p"
+        return xr.DataArray(patches, dims=new_dims)
         
 
     def preprocess(self, data: xr.DataArray) -> xr.DataArray:
