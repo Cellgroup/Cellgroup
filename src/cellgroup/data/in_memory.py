@@ -99,7 +99,7 @@ class InMemoryDataset(Dataset):
             for channel in self.fnames[sample].keys():
                 per_channel_data = []
                 coords[Axis.C.value].append(channel)
-                for i, fname in enumerate(self.fnames[sample][channel]):
+                for fname in self.fnames[sample][channel]:
                     self.ext = fname.suffix
                     img = self._load_img(fname)
                     # TODO: add time coordinates
