@@ -17,18 +17,18 @@ class DatasetConfig(BaseModel):
     channels: list[ChannelID]
     """List of channels to load from the dataset."""
     
-    t_steps_slice: Optional[tuple[int, int, int]] = None
+    time_steps: Optional[tuple[int, int, int]] = None
     """Tuple of (start, end, step) for the time steps to load."""
     
     img_dim: Literal["2D", "3D"] = "2D"
     """Dimensionality of the images."""
     
-    patch_size: tuple[int, int, int]
+    patch_size: tuple[int, ...]
     """Size of the patches to extract."""
     
     @field_validator("time_steps")
     @classmethod
-    def validate_time_steps(cls, v: tuple[int, int, int]) -> tuple[int, int, int]:
+    def validate_time_steps(cls, v: tuple[int, ...]) -> tuple[int, ...]:
         """Validate the time steps."""
         assert len(v) >= 2, "You need to provide at least (start, end)."
         assert len(v) <= 3, "You can provide at most (start, end, step)."

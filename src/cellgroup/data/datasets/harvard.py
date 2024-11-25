@@ -103,11 +103,11 @@ def _subsample_timesteps(
 
 def get_fnames(
     data_dir: Union[str, Path],
-    samples: Sequence[SampleID],
-    channels: Sequence[ChannelID],
+    samples: Sequence[SampleIDHarvard],
+    channels: Sequence[ChannelIDHarvard],
     img_dim: Literal["2D", "3D"] = "2D",
-    t_steps_slice: Optional[tuple[int, int, int]] = None,
-) -> dict[SampleID, dict[ChannelID, list[Path]]]:
+    time_steps: Optional[tuple[int, int, int]] = None,
+) -> dict[SampleIDHarvard, dict[ChannelIDHarvard, list[Path]]]:
     """Get the filenames for the given samples and channels.
     
     The resulting filenames are ordered by timesteps and organized in a dict by
@@ -124,13 +124,13 @@ def get_fnames(
     ----------
     data_dir : Union[str, Path]
         The directory containing the data.
-    samples : Sequence[SampleID]
+    samples : Sequence[SampleIDHarvard]
         The IDs of the samples to include.
-    channels : Sequence[ChannelID]
+    channels : Sequence[ChannelIDHarvard]
         The IDs of the channels to include.
     img_dim : Literal["2D", "3D"]
         The dimensionality of the images. By default "2D".
-    t_steps_slice : Optional[tuple[int, int, int]]
+    time_steps : Optional[tuple[int, int, int]]
         A slice of time steps to include, in the form (start, end, step).
         If None, all time steps are taken. By default None.
     
@@ -140,7 +140,7 @@ def get_fnames(
         The list of filenames, organized by sample and channel.
     """
     assert img_dim == "2D", "Only 2D images are supported for now."
-    assert SampleID.A05 not in samples, "Well A05 not available in the dataset for now."
+    assert SampleIDHarvard.A05 not in samples, "Well A05 not available in the dataset for now."
     
     subdir = "slices" if img_dim == "2D" else "stacks"
     fnames_dict = {}
@@ -152,8 +152,8 @@ def get_fnames(
                 fname for fname in os.listdir(sample_subdir) if channel_id.value in fname
             ]
             curr_fnames = _sort_files_by_time(curr_fnames)
-            if t_steps_slice is not None:
-                curr_fnames = _subsample_timesteps(curr_fnames, t_steps_slice)
+            if time_steps is not None:
+                curr_fnames = _subsample_timesteps(curr_fnames, time_steps)
             fnames_dict[sample_id][channel_id] = [
                 Path(os.path.join(sample_subdir, fname)) for fname in curr_fnames
             ]
@@ -189,6 +189,7 @@ def load_images(
     dict[SampleID, dict[ChannelID, NDArray]]
         The loaded images, organized by well and channel.
     """
+    raise NotImplementedError("This function is not implemented yet.")
     fnames_dict = get_fnames(
         data_dir=data_dir, 
         well_ids=well_ids, 
