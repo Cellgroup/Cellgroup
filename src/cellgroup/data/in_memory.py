@@ -10,6 +10,7 @@ from torch.utils.data import Dataset
 
 from cellgroup.data.config import DatasetConfig
 from cellgroup.data.utils import Axis
+from cellgroup.data.utils.patching import extract_sequential_patches
 
 
 class InMemoryDataset(Dataset):
@@ -41,6 +42,7 @@ class InMemoryDataset(Dataset):
         self.dims = self._get_dims()
         self.fnames = get_fnames_fn(data_dir, **self.data_config.model_dump())
         self.data = self._load_data()
+        self.data_stats = self._get_data_stats()
         self.patches = self._prepare_patches()
         
     def _get_dims(self) -> Sequence[Axis]:
@@ -52,7 +54,6 @@ class InMemoryDataset(Dataset):
         else:
             raise ValueError(f"Unsupported image dimension {self.data_config.img_dim}")
         
-    
     def _load_img(self, fname: Path) -> NDArray:
         if self.ext == ".tif":
             return tiff.imread(fname)
@@ -83,9 +84,19 @@ class InMemoryDataset(Dataset):
             coords=coords,
             dims=self.dims
         )
+    
+    def _get_data_stats(self) -> dict:
+        """Get statistics about the data."""
+        pass
         
     def _prepare_patches(self) -> xr.DataArray:
         """Prepare the data for patch-based training."""
+        return extract_sequential_patches(
+            data=self.data,
+            patch_size=self.data_config.patch_size,
+        )
+        
+        
 
     def preprocess(self, data: xr.DataArray) -> xr.DataArray:
         """Preprocess the data.

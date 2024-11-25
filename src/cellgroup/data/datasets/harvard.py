@@ -1,6 +1,5 @@
 import os
 import re
-from enum import Enum
 from pathlib import Path
 from typing import Literal, Optional, Sequence, Union
 from warnings import warn
@@ -104,10 +103,10 @@ def _subsample_timesteps(
 
 def get_fnames(
     data_dir: Union[str, Path],
-    sample_ids: Sequence[SampleID],
-    channel_ids: Sequence[ChannelID],
+    samples: Sequence[SampleID],
+    channels: Sequence[ChannelID],
     img_dim: Literal["2D", "3D"] = "2D",
-    t_steps_subsample: Optional[tuple[int, int, int]] = None,
+    t_steps_slice: Optional[tuple[int, int, int]] = None,
 ) -> dict[SampleID, dict[ChannelID, list[Path]]]:
     """Get the filenames for the given samples and channels.
     
@@ -125,14 +124,14 @@ def get_fnames(
     ----------
     data_dir : Union[str, Path]
         The directory containing the data.
-    sample_ids : Sequence[SampleID]
+    samples : Sequence[SampleID]
         The IDs of the samples to include.
-    channel_ids : Sequence[ChannelID]
+    channels : Sequence[ChannelID]
         The IDs of the channels to include.
     img_dim : Literal["2D", "3D"]
         The dimensionality of the images. By default "2D".
-    t_steps_subsample : Optional[tuple[int, int, int]]
-        An interval of time steps to include, in the form (start, end, step).
+    t_steps_slice : Optional[tuple[int, int, int]]
+        A slice of time steps to include, in the form (start, end, step).
         If None, all time steps are taken. By default None.
     
     Returns
@@ -141,20 +140,20 @@ def get_fnames(
         The list of filenames, organized by sample and channel.
     """
     assert img_dim == "2D", "Only 2D images are supported for now."
-    assert SampleID.A05 not in sample_ids, "Well A05 not available in the dataset for now."
+    assert SampleID.A05 not in samples, "Well A05 not available in the dataset for now."
     
     subdir = "slices" if img_dim == "2D" else "stacks"
     fnames_dict = {}
-    for sample_id in sample_ids:
+    for sample_id in samples:
         fnames_dict[sample_id] = {}
         sample_subdir = os.path.join(data_dir, subdir, sample_id.value)
-        for channel_id in channel_ids:
+        for channel_id in channels:
             curr_fnames = [
                 fname for fname in os.listdir(sample_subdir) if channel_id.value in fname
             ]
             curr_fnames = _sort_files_by_time(curr_fnames)
-            if t_steps_subsample is not None:
-                curr_fnames = _subsample_timesteps(curr_fnames, t_steps_subsample)
+            if t_steps_slice is not None:
+                curr_fnames = _subsample_timesteps(curr_fnames, t_steps_slice)
             fnames_dict[sample_id][channel_id] = [
                 Path(os.path.join(sample_subdir, fname)) for fname in curr_fnames
             ]

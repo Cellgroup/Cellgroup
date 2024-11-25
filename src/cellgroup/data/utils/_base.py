@@ -8,7 +8,7 @@ class Axis(Enum):
     C = "c"
     T = "t"
     N = "n"
-    
+
     
 class SampleID(Enum):
     """IDs for the different samples in the dataset."""

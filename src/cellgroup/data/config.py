@@ -1,5 +1,5 @@
 """Here we will put config for datasets using Pydantic."""
-from typing import Literal, Self
+from typing import Literal, Optional, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -17,10 +17,10 @@ class DatasetConfig(BaseModel):
     channels: list[ChannelID]
     """List of channels to load from the dataset."""
     
-    time_steps: tuple[int, int, int]
+    t_steps_slice: Optional[tuple[int, int, int]] = None
     """Tuple of (start, end, step) for the time steps to load."""
     
-    img_dim: Literal["2D", "3D"]
+    img_dim: Literal["2D", "3D"] = "2D"
     """Dimensionality of the images."""
     
     patch_size: tuple[int, int, int]
