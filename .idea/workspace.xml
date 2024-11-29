@@ -4,8 +4,25 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e492e090-0ad7-46a0-a51c-a5ec7ac45715" name="Changes" comment="pycharm link">
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+    <list default="true" id="e492e090-0ad7-46a0-a51c-a5ec7ac45715" name="Changes" comment="added compression files and init">
+      <change afterPath="$PROJECT_DIR$/Cellgroup/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Cellgroup/analysis/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Cellgroup/clustering/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Cellgroup/compression/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Cellgroup/compression/folder-tiff-compression.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Cellgroup/compression/tiff-compression.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Cellgroup/preprocessing/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Cellgroup/segmentation/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/A08_RGB.tif" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/EXP2111_A09_D#14_T0008_C13.tif" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/clustering_analysis.pdf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/clustering_in_silico.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/clustering_utils2.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/compressed.tif" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/compressed2.tif" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/improve_notebook.ipynb" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/results.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/notebooks/cellgroup/temporal_clustering.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/notebooks/cellgroup/clean_notebook.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/notebooks/cellgroup/clean_notebook.ipynb" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/notebooks/cellgroup/clustering_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/notebooks/cellgroup/clustering_utils.py" afterDir="false" />
@@ -18,6 +35,7 @@
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
       <list>
+        <option value="Jupyter Notebook" />
         <option value="Python Script" />
       </list>
     </option>
@@ -48,12 +66,16 @@
     <option name="stateVersion" value="1" />
   </component>
   <component name="ProjectId" id="2Ui9hZ7eVg70FLaiq4eEOiV5eUX" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
+    &quot;ASKED_ADD_EXTERNAL_FILES&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
@@ -67,12 +89,34 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$/notebooks/cellgroup/cyoptics_clustering" />
       <recent name="$PROJECT_DIR$/notebooks/cellgroup" />
+      <recent name="$PROJECT_DIR$/notebooks/cellgroup/cyoptics_clustering" />
       <recent name="$PROJECT_DIR$" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python.clustering_in_silico">
+    <configuration name="clustering_in_silico" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="Cellgroup_git" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/notebooks/cellgroup" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/notebooks/cellgroup/clustering/clustering_in_silico.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="clustering_utils" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="Cellgroup_git" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -95,8 +139,55 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <configuration name="compression_deflate" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="Cellgroup_git" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/notebooks/cellgroup/cyoptics_clustering" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/notebooks/cellgroup/cyoptics_clustering/compression_deflate.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="tiff-compression" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="Cellgroup_git" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/notebooks/cellgroup" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/notebooks/cellgroup/tiff-compression.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.clustering_in_silico" />
+        <item itemvalue="Python.compression_deflate" />
+        <item itemvalue="Python.tiff-compression" />
         <item itemvalue="Python.clustering_utils" />
       </list>
     </recent_temporary>
@@ -113,6 +204,12 @@
       <workItem from="1693430090265" duration="39000" />
       <workItem from="1693430826761" duration="609000" />
       <workItem from="1724573006965" duration="12368000" />
+      <workItem from="1731851553224" duration="31596000" />
+      <workItem from="1732087117863" duration="4239000" />
+      <workItem from="1732175272925" duration="645000" />
+      <workItem from="1732257813304" duration="2903000" />
+      <workItem from="1732260987835" duration="163000" />
+      <workItem from="1732863556549" duration="1633000" />
     </task>
     <task id="LOCAL-00001" summary="added a :">
       <created>1693411711208</created>
@@ -158,11 +255,16 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
+    <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
     <MESSAGE value="added a :" />
     <MESSAGE value="pycharm link" />
-    <option name="LAST_COMMIT_MESSAGE" value="pycharm link" />
+    <MESSAGE value="added compression files and init" />
+    <option name="LAST_COMMIT_MESSAGE" value="added compression files and init" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/Cellgroup$compression_deflate.coverage" NAME="compression_deflate Coverage Results" MODIFIED="1731915206351" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/notebooks/cellgroup/cyoptics_clustering" />
     <SUITE FILE_PATH="coverage/Cellgroup_Davide$clustering_utils.coverage" NAME="clustering_utils Coverage Results" MODIFIED="1724656497011" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/notebooks/cellgroup" />
+    <SUITE FILE_PATH="coverage/Cellgroup$clustering_in_silico.coverage" NAME="clustering_in_silico Coverage Results" MODIFIED="1732863593203" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/notebooks/cellgroup" />
+    <SUITE FILE_PATH="coverage/Cellgroup$tiff_compression.coverage" NAME="tiff-compression Coverage Results" MODIFIED="1731914749415" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/notebooks/cellgroup" />
   </component>
 </project>
