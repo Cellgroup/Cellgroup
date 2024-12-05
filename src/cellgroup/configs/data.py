@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from cellgroup.data.utils import SampleID, ChannelID
 
 
-class DatasetConfig(BaseModel):
+class DataConfig(BaseModel):
     """Config for datasets."""
 
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
