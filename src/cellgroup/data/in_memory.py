@@ -1,6 +1,6 @@
 import inspect
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Optional, Sequence
 
 import numpy as np
 import tifffile as tiff
@@ -8,9 +8,11 @@ import xarray as xr
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
 
-from cellgroup.data.config import DatasetConfig
-from cellgroup.data.utils import Axis
-from cellgroup.data.utils.patching import extract_sequential_patches
+from cellgroup.configs import DataConfig
+from cellgroup.utils import Axis
+from cellgroup.data.patching import (
+    extract_sequential_patches, extract_overlapped_patches, PatchInfo
+)
 
 
 class InMemoryDataset(Dataset):
@@ -26,7 +28,7 @@ class InMemoryDataset(Dataset):
     def __init__(
         self,
         data_dir: Path,
-        data_config: DatasetConfig,
+        data_config: DataConfig,
         get_fnames_fn: Callable,
         # TODO: in case of synthetic data we need to pass a different function
     ):
@@ -36,27 +38,33 @@ class InMemoryDataset(Dataset):
         ----------
         data_dir : Path
             The directory containing the data.
-        data_config : DatasetConfig
+        data_config : DataConfig
             Configuration for the dataset.
         get_fnames_fn : Callable
             Function to get the filenames to load from the data directory.
         """
-        self.data_dir = data_dir
-        self.data_config = data_config
-        self.dims = self._get_dims()
-        self.data = self._load_data(get_fnames_fn)
-        self.data_stats = self._get_data_stats()
-        self.patches = self._prepare_patches()
+        self.data_dir: str = data_dir
+        self.data_config: DataConfig = data_config
+        
+        self.dims: Sequence[Axis] = self._get_dims()
+        
+        self.data: xr.DataArray = self._load_data(get_fnames_fn) 
+        # (N, C, T, [Z], Y, X)
+        
+        self.data_stats: dict[str, float] = self._get_data_stats()
+        
+        self.patches: xr.DataArray = self._prepare_patches() 
+        # (N, C, T, P, [Z'], Y', X')
         
     def _get_dims(self) -> Sequence[Axis]:
         """Get the dimensions of the data."""
         if self.data_config.img_dim == "2D":
             return [
-                Axis.N.value, Axis.C.value, Axis.T.value, Axis.Y.value, Axis.X.value
+                Axis.N, Axis.C, Axis.T, Axis.Y, Axis.X
             ]
         elif self.data_config.img_dim == "3D":
             return [
-                Axis.N.value, Axis.C.value, Axis.T.value, Axis.Z.value, Axis.Y.value, Axis.X.value
+                Axis.N, Axis.C, Axis.T, Axis.Z, Axis.Y, Axis.X
             ]
         else:
             raise ValueError(f"Unsupported image dimension {self.data_config.img_dim}")
@@ -112,24 +120,22 @@ class InMemoryDataset(Dataset):
             dims=self.dims
         )
     
-    def _get_data_stats(self) -> dict:
+    def _get_data_stats(self) -> dict[str, float]:
         """Get statistics about the data.
-        
-        NOTE: statistics are computed per channel on the entire dataset.
         
         Returns
         -------
-        dict
+        dict[str, float]
             Data statistics stored in a dict, whose keys are "mean" and "std".
         """
-        # TODO: differentiate by channel (?)
+        # TODO: compute by channel (?)
         return {
             "mean": self.data.mean(dim=self.dims),
             "std": self.data.std(dim=self.dims),
         }
         
         
-    def _prepare_patches(self) -> xr.DataArray:
+    def _prepare_patches(self) -> tuple[xr.DataArray, Optional[PatchInfo]]:
         """Prepare the data for patch-based training.
         
         Returns
@@ -137,14 +143,21 @@ class InMemoryDataset(Dataset):
         xr.DataArray
             The data in patch form. Shape is (n_patches, C, T, [Z'], Y', X').
         """
-        patches = extract_sequential_patches(
-            data=self.data.values,
-            patch_size=self.data_config.patch_size,
-        )
-        new_dims = self.dims.copy()
-        new_dims[0] = "p"
-        return xr.DataArray(patches, dims=new_dims)
-        
+        if self.data_config.patch_overlap is None:
+            patches = extract_sequential_patches(
+                data=self.data.values,
+                patch_size=self.data_config.patch_size,
+            )
+            new_dims = self.dims.copy()
+            new_dims[0] = "p"
+            patches = xr.DataArray(patches, dims=new_dims)    
+        else:
+            patches = extract_overlapped_patches(
+                data=self.data,
+                patch_size=self.data_config.patch_size,
+                patch_overlap=self.data_config.patch_overlap,
+            )
+        return patches
 
     def preprocess(self, data: xr.DataArray) -> xr.DataArray:
         """Preprocess the data.

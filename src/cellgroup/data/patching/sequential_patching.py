@@ -10,6 +10,7 @@ def _validate_patch_size(
     patch_size: Sequence[int]
 ) -> tuple[int, ...]:
     """Validate the patch size."""
+    # TODO: implement this function
     pass
 
 
@@ -171,6 +172,8 @@ def extract_sequential_patches(
         -1,
     ] + patch_size[1:]
 
+    # TODO: change order of coords, make similar to extract_overlapped_patches
+    
     # Generate a view of the input array containing pre-calculated number of patches
     # in each dimension with overlap.
     # Resulting array is resized to (n_patches, C, Z, Y, X) or (n_patches, C, Y, X)

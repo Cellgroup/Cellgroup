@@ -3,7 +3,7 @@ from typing import Literal, Optional, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from cellgroup.data.utils import SampleID, ChannelID
+from cellgroup.utils import SampleID, ChannelID
 
 
 class DataConfig(BaseModel):
@@ -26,8 +26,8 @@ class DataConfig(BaseModel):
     patch_size: tuple[int, ...]
     """Size of the patches to extract."""
     
-    patch_overlap: tuple[int, ...] = (0, 0, 0)
-    """Overlap of the patches."""
+    patch_overlap: Optional[tuple[int, ...]] = None
+    """Overlap of the patches. If None, patching is done sequentially on a grid."""
     
     @field_validator("time_steps")
     @classmethod
