@@ -26,6 +26,9 @@ class DatasetConfig(BaseModel):
     patch_size: tuple[int, ...]
     """Size of the patches to extract."""
     
+    patch_overlap: tuple[int, ...] = (0, 0, 0)
+    """Overlap of the patches."""
+    
     @field_validator("time_steps")
     @classmethod
     def validate_time_steps(cls, v: tuple[int, ...]) -> tuple[int, ...]:
