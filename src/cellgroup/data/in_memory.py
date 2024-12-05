@@ -122,6 +122,7 @@ class InMemoryDataset(Dataset):
         dict
             Data statistics stored in a dict, whose keys are "mean" and "std".
         """
+        # TODO: differentiate by channel (?)
         return {
             "mean": self.data.mean(dim=self.dims),
             "std": self.data.std(dim=self.dims),
