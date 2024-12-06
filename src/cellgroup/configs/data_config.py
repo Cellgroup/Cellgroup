@@ -46,4 +46,6 @@ class DataConfig(BaseModel):
             assert len(self.patch_size) == 3, "You need to provide (Z, Y, X) as patch size"
         return self
     
+    # TODO: add validation for patch_overlap and patch_size
+    
     

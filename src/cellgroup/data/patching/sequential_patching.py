@@ -8,15 +8,6 @@ from skimage.util import view_as_windows
 from cellgroup.utils import Axis
 
 
-def _validate_patch_size(
-    arr: NDArray,
-    patch_size: Sequence[int]
-) -> tuple[int, ...]:
-    """Validate the patch size."""
-    # TODO: implement this function
-    pass
-
-
 def _compute_number_of_patches(
     arr_shape: tuple[int, ...], patch_sizes: Sequence[int]
 ) -> tuple[int, ...]:
@@ -159,9 +150,7 @@ def extract_sequential_patches(
     xr.DataArray
         Extracted patches. Shape is (N, C, T, P, [Z'], Y', X'), where
         ([Z'], Y', X') are the patch size.
-    """
-    _validate_patch_size(data[0], patch_size)
-    
+    """    
     # Update patch size to encompass N, C, and T dimensions
     patch_size = [*data.shape[:3], *patch_size]
 
