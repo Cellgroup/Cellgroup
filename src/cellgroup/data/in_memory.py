@@ -174,5 +174,34 @@ class InMemoryDataset(Dataset):
     def __len__(self):
         return self.data.sizes[Axis.N]
 
-    def __getitem__(self, idx):
-        return self.patches[idx]
+    def __getitem__(self, idx: int) -> tuple[NDArray, dict[Axis, int]]:
+        """Get a patch and its coordinates.
+        
+        Parameters
+        ----------
+        idx : int
+            The index of the patch to get.
+        
+        Returns
+        -------
+        tuple[np.ndarray, dict[Axis, int]]
+            The patch and its coordinates.
+        """
+        # TODO: return torch tensor (?)
+        N, C, T, P, *spatial = self.patches.shape
+        n = idx // (C * T * P)
+        remainder = idx % (C * T * P)
+        c = remainder // (T * P)
+        t = (remainder % (T * P)) // P
+        p = remainder % P
+        
+        patch = self.patches[n, c, t, p, ...]
+        # TODO: check if coords in this shape are useful
+        coords = {
+            Axis.N: self.patches.coords[Axis.N][n].values,
+            Axis.C: self.patches.coords[Axis.C][c].values,
+            Axis.T: t, # TODO: add time coordinates
+            Axis.P: self.patches.coords[Axis.P][p].values,
+        }
+              
+        return patch, coords
