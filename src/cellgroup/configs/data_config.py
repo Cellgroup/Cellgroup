@@ -3,10 +3,10 @@ from typing import Literal, Optional, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from cellgroup.data.utils import SampleID, ChannelID
+from cellgroup.utils import SampleID, ChannelID
 
 
-class DatasetConfig(BaseModel):
+class DataConfig(BaseModel):
     """Config for datasets."""
 
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
@@ -26,6 +26,9 @@ class DatasetConfig(BaseModel):
     patch_size: tuple[int, ...]
     """Size of the patches to extract."""
     
+    patch_overlap: Optional[tuple[int, ...]] = None
+    """Overlap of the patches. If None, patching is done sequentially on a grid."""
+    
     @field_validator("time_steps")
     @classmethod
     def validate_time_steps(cls, v: tuple[int, ...]) -> tuple[int, ...]:
@@ -42,5 +45,7 @@ class DatasetConfig(BaseModel):
         elif self.img_dim == "3D":
             assert len(self.patch_size) == 3, "You need to provide (Z, Y, X) as patch size"
         return self
+    
+    # TODO: add validation for patch_overlap and patch_size
     
     

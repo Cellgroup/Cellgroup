@@ -1,16 +1,11 @@
 from typing import Optional, Sequence, Union
 
 import numpy as np
+import xarray as xr
 from numpy.typing import NDArray
 from skimage.util import view_as_windows
 
-
-def _validate_patch_size(
-    arr: NDArray,
-    patch_size: Sequence[int]
-) -> tuple[int, ...]:
-    """Validate the patch size."""
-    pass
+from cellgroup.utils import Axis
 
 
 def _compute_number_of_patches(
@@ -137,7 +132,7 @@ def _compute_patch_views(
 
 
 def extract_sequential_patches(
-    data: NDArray,
+    data: xr.DataArray,
     patch_size: Sequence[int],
     # TODO: introduce overlap between patches
 ) -> NDArray:
@@ -145,19 +140,17 @@ def extract_sequential_patches(
     
     Parameters
     ----------
-    data : np.ndarray
+    data : xr.DataArray
         Input array. Shape is (N, C, T, [Z], Y, X).
     patch_size : Sequence[int]
         Size of the patches to extract. It covers the spatial dimensions only.
     
     Returns
     -------
-    NDArray
-        Extracted patches. Shape is (N, n_patches, C, T, [Z'], Y', X'), where
+    xr.DataArray
+        Extracted patches. Shape is (N, C, T, P, [Z'], Y', X'), where
         ([Z'], Y', X') are the patch size.
-    """
-    _validate_patch_size(data[0], patch_size)
-    
+    """    
     # Update patch size to encompass N, C, and T dimensions
     patch_size = [*data.shape[:3], *patch_size]
 
@@ -166,20 +159,21 @@ def extract_sequential_patches(
 
     # Create view window and overlaps
     window_steps = _compute_patch_steps(patch_sizes=patch_size, overlaps=overlaps)
-
-    output_shape = [
-        -1,
-    ] + patch_size[1:]
-
+    
     # Generate a view of the input array containing pre-calculated number of patches
     # in each dimension with overlap.
-    # Resulting array is resized to (n_patches, C, Z, Y, X) or (n_patches, C, Y, X)
+    out_shape = patch_size.copy()
+    out_shape.insert(3, -1)
     patches = _compute_patch_views(
-        data,
+        data.values,
         window_shape=patch_size,
         step=window_steps,
-        output_shape=output_shape,
-    )
+        output_shape=out_shape,
+    ) # shape: (N, C, T, P, [Z'], Y', X')
+    new_dims = list(data.dims)
+    new_dims.insert(3, Axis.P)
+    # TODO: add coords for P (?)
+    patches = xr.DataArray(patches, coords=data.coords, dims=new_dims)
     return patches
 
 

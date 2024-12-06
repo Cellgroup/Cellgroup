@@ -9,7 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-from cellgroup.data.utils import SampleID, ChannelID
+from cellgroup.utils import SampleID, ChannelID
 
 class SampleIDHarvard(SampleID):
     """IDs for the different samples in the dataset.
