@@ -172,7 +172,7 @@ class InMemoryDataset(Dataset):
         return data
     
     def __len__(self):
-        return self.data.sizes[Axis.N]
+        return np.prod(self.patches.shape[:4])
 
     def __getitem__(self, idx: int) -> tuple[NDArray, dict[Axis, int]]:
         """Get a patch and its coordinates.
@@ -187,6 +187,8 @@ class InMemoryDataset(Dataset):
         tuple[np.ndarray, dict[Axis, int]]
             The patch and its coordinates.
         """
+        assert idx < len(self), f"Index {idx} is out of bounds."
+        
         # TODO: return torch tensor (?)
         N, C, T, P, *spatial = self.patches.shape
         n = idx // (C * T * P)
@@ -194,6 +196,7 @@ class InMemoryDataset(Dataset):
         c = remainder // (T * P)
         t = (remainder % (T * P)) // P
         p = remainder % P
+        print(n, c, t, p)
         
         patch = self.patches[n, c, t, p, ...]
         # TODO: check if coords in this shape are useful
