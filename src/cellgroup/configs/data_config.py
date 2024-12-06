@@ -3,7 +3,7 @@ from typing import Literal, Optional, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from cellgroup.utils import SampleID, ChannelID
+from cellgroup.utils import Sample, Channel
 
 
 class DataConfig(BaseModel):
@@ -11,10 +11,10 @@ class DataConfig(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
     
-    samples: list[SampleID]
+    samples: list[Sample]
     """List of samples to load from the dataset."""
     
-    channels: list[ChannelID]
+    channels: list[Channel]
     """List of channels to load from the dataset."""
     
     time_steps: Optional[tuple[int, int, int]] = None
