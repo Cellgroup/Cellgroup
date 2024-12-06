@@ -1,0 +1,17 @@
+# Testing
+pytest            # Basic testing framework
+pytest-cov        # Test coverage reporting
+
+# Code Quality
+black            # Code formatting
+flake8           # Code style and error checking
+isort            # Import sorting
+mypy             # Type checking
+
+# Documentation
+sphinx           # Generate documentation
+sphinx-rtd-theme # Documentation theme
+jupyter          # For running example notebooks
+
+# Main package dependencies (can reference requirements.txt)
+-r requirements.txt
