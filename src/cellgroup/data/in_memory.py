@@ -196,7 +196,6 @@ class InMemoryDataset(Dataset):
         c = remainder // (T * P)
         t = (remainder % (T * P)) // P
         p = remainder % P
-        print(n, c, t, p)
         
         patch = self.patches[n, c, t, p, ...]
         # TODO: check if coords in this shape are useful
