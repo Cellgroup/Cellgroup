@@ -186,7 +186,8 @@ def extract_overlapped_patches(
                 
     new_coords = data.coords.copy()
     new_coords["p"] = patches_info
-    new_dims = data.dims[:3] + (Axis.P,) + data.dims[3:]
+    new_dims = list(data.dims)
+    new_dims.insert(3, Axis.P)
     patches = xr.DataArray(
         np.asarray(all_patches),
         coords=new_coords,

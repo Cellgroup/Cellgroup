@@ -145,12 +145,9 @@ class InMemoryDataset(Dataset):
         """
         if self.data_config.patch_overlap is None:
             patches = extract_sequential_patches(
-                data=self.data.values,
+                data=self.data,
                 patch_size=self.data_config.patch_size,
-            )
-            new_dims = self.dims.copy()
-            new_dims[0] = "p"
-            patches = xr.DataArray(patches, dims=new_dims)    
+            ) 
         else:
             patches = extract_overlapped_patches(
                 data=self.data,
