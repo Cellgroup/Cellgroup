@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from torch.utils.data import Dataset
 
 from cellgroup.configs import DataConfig
+from cellgroup.data.preprocessing import normalize
 from cellgroup.utils import Axis
 from cellgroup.data.patching import (
     extract_sequential_patches, extract_overlapped_patches, PatchInfo
@@ -160,21 +161,6 @@ class InMemoryDataset(Dataset):
                 patch_overlap=self.data_config.patch_overlap,
             )
         return patches
-    
-    def _normalize(self, data: xr.DataArray) -> xr.DataArray:
-        """Normalize the data.
-        
-        Parameters
-        ----------
-        data : xr.DataArray
-            The data to normalize.
-        
-        Returns
-        -------
-        xr.DataArray
-            The normalized data.
-        """
-        return (data - self.data_stats["mean"]) / self.data_stats["std"]
 
     def preprocess(self, data: xr.DataArray) -> xr.DataArray:
         """Preprocess the data.
@@ -189,7 +175,7 @@ class InMemoryDataset(Dataset):
         xr.DataArray
             The preprocessed data.
         """
-        data = self._normalize(data)
+        data = normalize(data)
         return data
     
     def __len__(self):
