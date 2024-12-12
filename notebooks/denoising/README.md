@@ -7,7 +7,7 @@ This folder contains test files that check if the functions in Cellgroup work co
 The test files match the module structure:
 
 ```
-tests/
+notebooks/
 └── denoising/
     ├── test_gradients.py     - Tests for image gradient analysis
     ├── test_intensity.py     - Tests for light intensity measurements
