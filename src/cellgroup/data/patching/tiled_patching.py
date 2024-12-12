@@ -1,5 +1,6 @@
 import itertools
-from typing import Sequence
+import builtins
+from typing import Sequence, Union
 
 import numpy as np
 import xarray as xr
@@ -194,3 +195,57 @@ def extract_overlapped_patches(
         dims=new_dims,
     )
     return patches
+
+
+def stitch_overlapped_patches(
+    patches: Sequence[xr.DataArray],
+    patch_infos: Sequence[PatchInfo],
+) -> xr.DataArray:
+    """Stitch patches together.
+
+    Parameters
+    ----------
+    patches : Sequence[xr.DataArray]
+        Sequence of arrays of shape ((Z), Y, X).
+    patch_infos : Sequence[PatchInfo]
+        Sequence of patch information objects.
+
+    Returns
+    -------
+    xr.DataArray
+        Array of shape (N, C, T, (Z), Y, X).
+    """
+    # TODO: this is hacky... need a better way to deal with when input channels and
+    # target channels do not match
+    if len(patch_infos[0].array_shape) == 4:
+        # 4 dimensions => 3 spatial dimensions so -4 is channel dimension
+        tile_channels = patches[0].shape[-4]
+    elif len(patch_infos[0].array_shape) == 3:
+        # 3 dimensions => 2 spatial dimensions so -3 is channel dimension
+        tile_channels = patches[0].shape[-3]
+    else:
+        # Note pretty sure this is unreachable because array shape is already
+        #   validated by TileInformation
+        raise ValueError(
+            f"Unsupported number of output dimension {len(patch_infos[0].array_shape)}"
+        )
+    # retrieve whole array size, add S dim and use number of channels in tile
+    input_shape = (1, tile_channels, *patch_infos[0].array_shape[1:])
+    predicted_image = np.zeros(input_shape, dtype=np.float32)
+
+    for tile, tile_info in zip(patches, patch_infos):
+
+        # Compute coordinates for cropping predicted tile
+        crop_slices: tuple[Union[builtins.ellipsis, slice], ...] = (
+            ...,
+            *[slice(c[0], c[1]) for c in tile_info.overlap_crop_coords],
+        )
+
+        # Crop predited tile according to overlap coordinates
+        cropped_tile = tile[crop_slices]
+
+        # Insert cropped tile into predicted image using stitch coordinates
+        image_slices = (..., *[slice(c[0], c[1]) for c in tile_info.stitch_coords])
+        predicted_image[image_slices] = cropped_tile.astype(np.float32)
+
+    return predicted_image

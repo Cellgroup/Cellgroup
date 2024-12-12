@@ -175,7 +175,7 @@ class InMemoryDataset(Dataset):
         xr.DataArray
             The preprocessed data.
         """
-        data = normalize(data)
+        data = normalize(data, self.data_stats)
         return data
     
     def __len__(self):
