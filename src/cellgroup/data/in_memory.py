@@ -143,6 +143,11 @@ class InMemoryDataset(Dataset):
         xr.DataArray
             The data in patch form. Shape is (n_patches, C, T, [Z'], Y', X').
         """
+        # --- preprocess data
+        # TODO: move somewhere else
+        self.data = self.preprocess(self.data)
+        
+        # --- extract patches
         if self.data_config.patch_overlap is None:
             patches = extract_sequential_patches(
                 data=self.data,
@@ -155,6 +160,21 @@ class InMemoryDataset(Dataset):
                 patch_overlap=self.data_config.patch_overlap,
             )
         return patches
+    
+    def _normalize(self, data: xr.DataArray) -> xr.DataArray:
+        """Normalize the data.
+        
+        Parameters
+        ----------
+        data : xr.DataArray
+            The data to normalize.
+        
+        Returns
+        -------
+        xr.DataArray
+            The normalized data.
+        """
+        return (data - self.data_stats["mean"]) / self.data_stats["std"]
 
     def preprocess(self, data: xr.DataArray) -> xr.DataArray:
         """Preprocess the data.
@@ -169,6 +189,7 @@ class InMemoryDataset(Dataset):
         xr.DataArray
             The preprocessed data.
         """
+        data = self._normalize(data)
         return data
     
     def __len__(self):

@@ -1,5 +1,5 @@
 """Here we will put config for datasets using Pydantic."""
-from typing import Literal, Optional, Self
+from typing import Any, Literal, Optional, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -29,12 +29,26 @@ class DataConfig(BaseModel):
     patch_overlap: Optional[tuple[int, ...]] = None
     """Overlap of the patches. If None, patching is done sequentially on a grid."""
     
+    batch_size: int = 1
+    """Batch size for the dataloader."""
+    
+    dloader_kwargs: Optional[dict[str, Any]] = None
+    """Additional kwargs for the dataloader."""
+    
     @field_validator("time_steps")
     @classmethod
     def validate_time_steps(cls, v: tuple[int, ...]) -> tuple[int, ...]:
         """Validate the time steps."""
         assert len(v) >= 2, "You need to provide at least (start, end)."
         assert len(v) <= 3, "You can provide at most (start, end, step)."
+        return v
+    
+    @field_validator("dloader_kwargs")
+    @classmethod
+    def validate_dloader_kwargs(cls, v: dict[str, Any]) -> dict[str, Any]:
+        """Validate the dataloader kwargs."""
+        if v is None:
+            return {}
         return v
     
     @model_validator(mode="after")
