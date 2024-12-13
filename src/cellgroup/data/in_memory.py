@@ -145,7 +145,7 @@ class InMemoryDataset(Dataset):
             The data in patch form. Shape is (n_patches, C, T, [Z'], Y', X').
         """
         # --- preprocess data
-        # TODO: move somewhere else
+        # TODO: move somewhere else (?)
         self.data = self.preprocess(self.data)
         
         # --- extract patches
@@ -177,7 +177,7 @@ class InMemoryDataset(Dataset):
         """
         data = normalize(data, self.data_stats)
         return data
-    
+
     def __len__(self):
         return np.prod(self.patches.shape[:4])
 
