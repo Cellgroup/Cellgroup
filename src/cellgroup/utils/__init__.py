@@ -1,3 +1,3 @@
-from ._base import Axis, SampleID, ChannelID
+from ._base import Axis, Sample, Channel
 
-__all__ = ["Axis", "SampleID", "ChannelID"]
+__all__ = ["Axis", "Sample", "Channel"]

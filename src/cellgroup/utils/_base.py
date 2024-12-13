@@ -16,12 +16,23 @@ class Axis(str, Enum):
     def __str__(self) -> str:
         return self.value
     
-    
-# TODO: make abstract classes
-class SampleID(Enum):
+
+class Sample(Enum):
     """IDs for the different samples in the dataset."""
     pass
+
+    def __repr__(self) -> str:
+        return f"<Sample.{self.name}>"
+
+    def __str__(self) -> str:
+        return self.value
     
-class ChannelID(Enum):
+class Channel(Enum):
     """IDs for the different channels in the dataset."""
     pass
+
+    def __repr__(self) -> str:
+        return f"<Channel.{self.name}>"
+
+    def __str__(self) -> str:
+        return self.value

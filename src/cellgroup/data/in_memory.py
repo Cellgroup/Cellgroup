@@ -143,6 +143,11 @@ class InMemoryDataset(Dataset):
         xr.DataArray
             The data in patch form. Shape is (n_patches, C, T, [Z'], Y', X').
         """
+        # --- preprocess data
+        # TODO: move somewhere else
+        self.data = self.preprocess(self.data)
+        
+        # --- extract patches
         if self.data_config.patch_overlap is None:
             patches = extract_sequential_patches(
                 data=self.data,
@@ -155,6 +160,21 @@ class InMemoryDataset(Dataset):
                 patch_overlap=self.data_config.patch_overlap,
             )
         return patches
+    
+    def _normalize(self, data: xr.DataArray) -> xr.DataArray:
+        """Normalize the data.
+        
+        Parameters
+        ----------
+        data : xr.DataArray
+            The data to normalize.
+        
+        Returns
+        -------
+        xr.DataArray
+            The normalized data.
+        """
+        return (data - self.data_stats["mean"]) / self.data_stats["std"]
 
     def preprocess(self, data: xr.DataArray) -> xr.DataArray:
         """Preprocess the data.
@@ -169,10 +189,42 @@ class InMemoryDataset(Dataset):
         xr.DataArray
             The preprocessed data.
         """
+        data = self._normalize(data)
         return data
     
     def __len__(self):
-        return self.data.sizes[Axis.N]
+        return np.prod(self.patches.shape[:4])
 
-    def __getitem__(self, idx):
-        return self.patches[idx]
+    def __getitem__(self, idx: int) -> tuple[NDArray, dict[Axis, int]]:
+        """Get a patch and its coordinates.
+        
+        Parameters
+        ----------
+        idx : int
+            The index of the patch to get.
+        
+        Returns
+        -------
+        tuple[np.ndarray, dict[Axis, int]]
+            The patch and its coordinates.
+        """
+        assert idx < len(self), f"Index {idx} is out of bounds."
+        
+        # TODO: return torch tensor (?)
+        N, C, T, P, *spatial = self.patches.shape
+        n = idx // (C * T * P)
+        remainder = idx % (C * T * P)
+        c = remainder // (T * P)
+        t = (remainder % (T * P)) // P
+        p = remainder % P
+        
+        patch = self.patches[n, c, t, p, ...]
+        # TODO: check if coords in this shape are useful
+        coords = {
+            Axis.N: self.patches.coords[Axis.N][n].values,
+            Axis.C: self.patches.coords[Axis.C][c].values,
+            Axis.T: t, # TODO: add time coordinates
+            Axis.P: self.patches.coords[Axis.P][p].values,
+        }
+              
+        return patch, coords

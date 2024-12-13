@@ -9,9 +9,9 @@ import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-from cellgroup.utils import SampleID, ChannelID
+from cellgroup.utils import Sample, Channel
 
-class SampleIDHarvard(SampleID):
+class SampleHarvard(Sample):
     """IDs for the different samples in the dataset.
     
     NOTE: each sample is a well in the experiment.
@@ -22,7 +22,7 @@ class SampleIDHarvard(SampleID):
     A08 = "_A08_"
     A09 = "_A09_"
     
-class ChannelIDHarvard(ChannelID):
+class ChannelHarvard(Channel):
     """IDs for the different channels in the dataset."""
     Ch1 = "C01"
     Ch2 = "C02"
@@ -103,19 +103,19 @@ def _subsample_timesteps(
 
 def get_fnames(
     data_dir: Union[str, Path],
-    samples: Sequence[SampleIDHarvard],
-    channels: Sequence[ChannelIDHarvard],
+    samples: Sequence[SampleHarvard],
+    channels: Sequence[ChannelHarvard],
     img_dim: Literal["2D", "3D"] = "2D",
     time_steps: Optional[tuple[int, int, int]] = None,
-) -> dict[SampleIDHarvard, dict[ChannelIDHarvard, list[Path]]]:
+) -> dict[SampleHarvard, dict[ChannelHarvard, list[Path]]]:
     """Get the filenames for the given samples and channels.
     
     The resulting filenames are ordered by timesteps and organized in a dict by
-    `SampleID` and `ChannelID`. Specifically the structure is:
+    `Sample` and `Channel`. Specifically the structure is:
     ```
     {
-        SampleID: {
-            ChannelID: [Path, Path, ...]
+        Sample: {
+            Channel: [Path, Path, ...]
         }
     }
     ```
@@ -124,9 +124,9 @@ def get_fnames(
     ----------
     data_dir : Union[str, Path]
         The directory containing the data.
-    samples : Sequence[SampleIDHarvard]
+    samples : Sequence[SampleHarvard]
         The IDs of the samples to include.
-    channels : Sequence[ChannelIDHarvard]
+    channels : Sequence[ChannelHarvard]
         The IDs of the channels to include.
     img_dim : Literal["2D", "3D"]
         The dimensionality of the images. By default "2D".
@@ -136,11 +136,11 @@ def get_fnames(
     
     Returns
     -------
-    dict[SampleID, dict[ChannelID, list[Path]]]
+    dict[Sample, dict[Channel, list[Path]]]
         The list of filenames, organized by sample and channel.
     """
     assert img_dim == "2D", "Only 2D images are supported for now."
-    assert SampleIDHarvard.A05 not in samples, "Well A05 not available in the dataset for now."
+    assert SampleHarvard.A05 not in samples, "Well A05 not available in the dataset for now."
     
     subdir = "slices" if img_dim == "2D" else "stacks"
     fnames_dict = {}
@@ -163,20 +163,20 @@ def get_fnames(
 # TODO: remove?
 def load_images(
     data_dir: Union[str, Path],
-    well_ids: Sequence[SampleID],
-    channel_ids: Sequence[ChannelID],
+    well_ids: Sequence[Sample],
+    channel_ids: Sequence[Channel],
     img_dim: Literal["2D", "3D"] = "2D",
     t_steps_subsample: Optional[tuple[int, int, int]] = None,
-) -> dict[SampleID, dict[ChannelID, NDArray]]:
+) -> dict[Sample, dict[Channel, NDArray]]:
     """Load an image from a file.
     
     Parameters
     ----------
     data_dir : Union[str, Path]
         The directory containing the data.
-    well_ids : Sequence[SampleID]
+    well_ids : Sequence[Sample]
         The IDs of the wells to include.
-    channel_ids : Sequence[ChannelID]
+    channel_ids : Sequence[Channel]
         The IDs of the channels to include.
     img_dim : Literal["2D", "3D"]
         The dimensionality of the images. By default "2D".
@@ -186,7 +186,7 @@ def load_images(
     
     Returns
     -------
-    dict[SampleID, dict[ChannelID, NDArray]]
+    dict[Sample, dict[Channel, NDArray]]
         The loaded images, organized by well and channel.
     """
     raise NotImplementedError("This function is not implemented yet.")
