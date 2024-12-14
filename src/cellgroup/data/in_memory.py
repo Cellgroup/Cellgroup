@@ -1,6 +1,6 @@
 import inspect
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
 import tifffile as tiff
@@ -181,7 +181,7 @@ class InMemoryDataset(Dataset):
     def __len__(self):
         return np.prod(self.patches.shape[:4])
 
-    def __getitem__(self, idx: int) -> tuple[NDArray, dict[Axis, int]]:
+    def __getitem__(self, idx: int) -> tuple[NDArray, dict[str, dict[str, Any]]]:
         """Get a patch and its coordinates.
         
         Parameters
@@ -191,8 +191,15 @@ class InMemoryDataset(Dataset):
         
         Returns
         -------
-        tuple[np.ndarray, dict[Axis, int]]
-            The patch and its coordinates.
+        tuple[np.ndarray, dict[str, dict[str, Any]]]
+            The patch as a `numpy` array with its coords and dims in a dict.
+            The dict has the following structure:
+            ```
+            {
+                "coords": {Axis : int | PatchInfo},
+                "dims": list[Axis],
+            }
+            ```
         """
         assert idx < len(self), f"Index {idx} is out of bounds."
         
@@ -206,12 +213,15 @@ class InMemoryDataset(Dataset):
         
         # TODO: use torch (?)
         patch = self.patches[n, c, t, p, ...].values
-        # TODO: check if coords in this form are useful
         coords = {
-            Axis.N: self.patches.coords[Axis.N][n].values,
-            Axis.C: self.patches.coords[Axis.C][c].values,
+            Axis.N: self.patches.coords[Axis.N][n].values.item(),
+            Axis.C: self.patches.coords[Axis.C][c].values.item(),
             Axis.T: t, # TODO: add time coordinates
-            Axis.P: self.patches.coords[Axis.P][p].values,
+            Axis.P: self.patches.coords[Axis.P][p].values.item(),
         }
-              
-        return patch, coords
+        dims = self.patches.dims
+        info = {
+            "coords": coords,
+            "dims": dims,
+        }
+        return patch, info

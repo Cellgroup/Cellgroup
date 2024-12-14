@@ -1,10 +1,10 @@
-import itertools
 import builtins
-from typing import Sequence, Union
+from typing import Any, Sequence, Union
 
 import numpy as np
 import xarray as xr
 from numpy.typing import NDArray
+from tqdm import tqdm
 
 from cellgroup.data.patching._base import PatchInfo
 from cellgroup.utils import Axis
@@ -47,3 +47,47 @@ def stitch_patches_single(
         predicted_image[image_slices] = cropped_tile.astype(np.float32)
 
     return predicted_image
+
+
+def stitch_patches(
+    patches: Sequence[NDArray],
+    infos: Sequence[dict[str, dict[str, Any]]],
+) -> NDArray:
+    """Stitch patches of a single frame.
+
+    Parameters
+    ----------
+    patches : Sequence[NDArray]
+        Sequence of arrays of shape ((Z), Y, X).
+    infos : Sequence[dict[str, dict[str, Any]]]
+        Sequence of additional information for each patch, comprising patch coords,
+        dims, as well as `PatchInfo` objects for stitching.
+        The dict must have the following structure:
+        ```
+        {
+            "coords": {Axis : int | PatchInfo},
+            "dims": list[Axis],
+        }
+        ```
+    
+    Returns
+    -------
+    NDArray
+        Array of shape (N, C, T, (Z), Y, X).
+    """
+    patch_infos = [
+        info["coords"][Axis.P] for info in infos
+    ]
+    start, end = 0, 0
+    imgs = []
+    for i in tqdm(range(len(patch_infos)), desc="Stitching patches"):
+        if patch_infos[i].last_patch:
+            end = i + 1
+            img = stitch_patches_single(patches[start:end], patch_infos[start:end])
+            img = xr.DataArray(
+                img,
+                coords=infos[start]["coords"],
+                dims=infos[start]["dims"],
+            )
+            imgs.append(img)
+            start = end        
