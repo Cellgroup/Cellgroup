@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 from tqdm import tqdm
 
 from cellgroup.data.patching._base import PatchInfo
+from cellgroup.data.utils import reorder_images
 from cellgroup.utils import Axis
 
 
@@ -80,14 +81,15 @@ def stitch_patches(
     ]
     start, end = 0, 0
     imgs = []
+    imgs_info = []
     for i in tqdm(range(len(patch_infos)), desc="Stitching patches"):
         if patch_infos[i].last_patch:
             end = i + 1
             img = stitch_patches_single(patches[start:end], patch_infos[start:end])
-            img = xr.DataArray(
-                img,
-                coords=infos[start]["coords"],
-                dims=infos[start]["dims"],
-            )
             imgs.append(img)
-            start = end        
+            imgs_info.append(infos[start]) # take only first since all equal
+            start = end
+    # --- reorder images into [N, C, T, (Z), Y, X] array
+    imgs = reorder_images(imgs, imgs_info)
+    return imgs
+    
