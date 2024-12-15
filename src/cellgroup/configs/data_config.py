@@ -1,9 +1,10 @@
 """Here we will put config for datasets using Pydantic."""
-from typing import Any, Literal, Optional, Self
+from typing import Any, Callable, Literal, Optional, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from cellgroup.utils import Sample, Channel
+from cellgroup.utils.support import SupportedPreprocessing
 
 
 class DataConfig(BaseModel):
@@ -31,6 +32,9 @@ class DataConfig(BaseModel):
     
     batch_size: int = 1
     """Batch size for the dataloader."""
+    
+    preprocessing_funcs: Optional[list[Callable]] = None
+    """List of preprocessing functions to apply to the data."""
     
     dloader_kwargs: Optional[dict[str, Any]] = None
     """Additional kwargs for the dataloader."""

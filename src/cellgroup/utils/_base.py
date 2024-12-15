@@ -32,6 +32,7 @@ class Sample(Enum):
         if isinstance(other, Sample):
             return self.value < other.value
         return NotImplemented
+
     
 class Channel(Enum):
     """IDs for the different channels in the dataset."""
