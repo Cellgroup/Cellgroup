@@ -15,10 +15,10 @@ class PatchInfo(BaseModel):
     model_config = ConfigDict(validate_default=True)
 
     array_shape: Sequence[int]
-    """Shape of the original (untiled) array."""
+    """Shape of the original full-frame array."""
 
-    last_tile: bool = False
-    """Whether this tile is the last one of the array."""
+    last_patch: bool = False
+    """Whether this patch is the last one of the array."""
 
     overlap_crop_coords: tuple[tuple[int, ...], ...]
     """Inner coordinates of the tile where to crop the prediction in order to stitch

@@ -1,5 +1,6 @@
 import itertools
-from typing import Sequence
+import builtins
+from typing import Sequence, Union
 
 import numpy as np
 import xarray as xr
@@ -123,15 +124,15 @@ def _extract_overlapped_patches(
         # Check if we are at the end of the sample by computing the length of the
         # array that contains all the tiles
         if tile_idx == max_tile_idx:
-            last_tile = True
+            last_patch = True
         else:
-            last_tile = False
+            last_patch = False
 
         # create tile information
         patch_info_lst.append(
             PatchInfo(
                 array_shape=arr.shape,
-                last_tile=last_tile,
+                last_patch=last_patch,
                 overlap_crop_coords=overlap_crop_coords,
                 stitch_coords=stitch_coords
             )
@@ -183,7 +184,9 @@ def extract_overlapped_patches(
                 curr_t.append(patches)
             curr_ch.append(curr_t)
         all_patches.append(curr_ch)
-                
+    
+    # TODO: check why coords are stored into arrays
+    # this is bad since we have to call `item()` to get the actual value           
     new_coords = data.coords.copy()
     new_coords["p"] = patches_info
     new_dims = list(data.dims)
