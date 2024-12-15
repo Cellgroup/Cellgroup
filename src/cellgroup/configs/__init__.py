@@ -1,1 +1,2 @@
-from .data_config import DataConfig
+from .data import DataConfig
+from .segmentation import SegmentationConfig
