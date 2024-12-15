@@ -4,7 +4,6 @@ from typing import Any, Callable, Literal, Optional, Self
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from cellgroup.utils import Sample, Channel
-from cellgroup.utils.support import SupportedPreprocessing
 
 
 class DataConfig(BaseModel):
