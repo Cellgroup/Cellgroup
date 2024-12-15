@@ -101,13 +101,17 @@ class InMemoryDataset(Dataset):
         """
         self.fnames = self._get_fnames_internal(get_fnames_fn)
         data = []
-        coords = {Axis.N.value: [], Axis.C.value: [],} # TODO: add time coordinates
+        coords = {
+            Axis.N: list(self.fnames.keys()),
+            Axis.C: list(self.fnames.values()[0].keys()),
+            # TODO: this will break if different samples have different channels ...
+            Axis.T: list(range(len(self.fnames.values()[0].values()[0]))),
+        }
         for sample in self.fnames.keys():
             per_sample_data = []
             coords[Axis.N.value].append(sample)
             for channel in self.fnames[sample].keys():
                 per_channel_data = []
-                coords[Axis.C.value].append(channel)
                 for fname in self.fnames[sample][channel]:
                     self.ext = fname.suffix
                     img = self._load_img(fname)
@@ -219,7 +223,7 @@ class InMemoryDataset(Dataset):
             Axis.T: t, # TODO: add time coordinates
             Axis.P: self.patches.coords[Axis.P][p].values.item(),
         }
-        dims = self.patches.dims
+        dims = list(self.patches.dims)
         info = {
             "coords": coords,
             "dims": dims,

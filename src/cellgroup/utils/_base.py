@@ -27,6 +27,12 @@ class Sample(Enum):
     def __str__(self) -> str:
         return self.value
     
+    def __lt__(self, other):
+        """Comparison operator for sorting."""
+        if isinstance(other, Sample):
+            return self.value < other.value
+        return NotImplemented
+    
 class Channel(Enum):
     """IDs for the different channels in the dataset."""
     pass
@@ -36,3 +42,9 @@ class Channel(Enum):
 
     def __str__(self) -> str:
         return self.value
+    
+    def __lt__(self, other):
+        """Comparison operator for sorting."""
+        if isinstance(other, Channel):
+            return self.value < other.value
+        return NotImplemented

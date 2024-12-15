@@ -22,6 +22,13 @@ class SampleHarvard(Sample):
     A08 = "_A08_"
     A09 = "_A09_"
     
+    def __lt__(self, other):
+        """Comparison operator for sorting."""
+        if isinstance(other, SampleHarvard):
+            return self.value < other.value
+        return NotImplemented
+
+    
 class ChannelHarvard(Channel):
     """IDs for the different channels in the dataset."""
     Ch1 = "C01"
@@ -29,6 +36,12 @@ class ChannelHarvard(Channel):
     Ch5 = "C05"
     Ch6 = "C06"
     Ch13 = "C13"
+    
+    def __lt__(self, other):
+        """Comparison operator for sorting."""
+        if isinstance(other, ChannelHarvard):
+            return self.value < other.value
+        return NotImplemented
 
 
 def _sort_files_by_time(files: list[str]) -> list[str]:

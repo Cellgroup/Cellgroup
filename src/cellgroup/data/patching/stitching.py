@@ -87,9 +87,12 @@ def stitch_patches(
             end = i + 1
             img = stitch_patches_single(patches[start:end], patch_infos[start:end])
             imgs.append(img)
-            imgs_info.append(infos[start]) # take only first since all equal
+            curr_info = infos[start]  # take only first since all equal
+            curr_info["coords"].pop(Axis.P) # remove patch info
+            curr_info["dims"].remove(Axis.P)
+            imgs_info.append(curr_info)
             start = end
-    # --- reorder images into [N, C, T, (Z), Y, X] array
-    imgs = reorder_images(imgs, imgs_info)
-    return imgs
+    # # --- reorder images into [N, C, T, (Z), Y, X] array
+    # imgs = reorder_images(imgs, imgs_info)
+    return imgs, imgs_info
     
