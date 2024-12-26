@@ -2,123 +2,111 @@ import numpy as np
 from scipy import fftpack
 from skimage import io, exposure
 import matplotlib.pyplot as plt
-from scipy.signal import find_peaks
 import tifffile
 
 
-def load_and_normalize_image(image_path):
-    """Load and normalize the image."""
-    original_image = tifffile.imread(image_path)
-    image_float = original_image.astype(float)
-    img_min = image_float.min()
-    img_max = image_float.max()
-    normalized_image = (image_float - img_min) / (img_max - img_min)
-    return normalized_image, image_float
+def load_and_enhance_image(image_path):
+    """Load and enhance image contrast."""
+    img = tifffile.imread(image_path)
+    img = img.astype(float)
+    p2, p98 = np.percentile(img, (2, 98))
+    img_enhanced = exposure.rescale_intensity(img, in_range=(p2, p98))
+    return img_enhanced
 
 
-def analyze_frequencies(image_path, row_step=10, col_step=10, patch_size=50):
+def analyze_frequencies(image_path):
     """
-    Analyze both spatial frequencies and noise patterns.
+    Focused frequency analysis showing key aspects of the frequency domain.
     """
-    # Load and normalize image
-    normalized_image, _ = load_and_normalize_image(image_path)
+    # Load and enhance image
+    img_enhanced = load_and_enhance_image(image_path)
 
     # FFT Analysis
-    fft2 = fftpack.fft2(normalized_image)
+    fft2 = fftpack.fft2(img_enhanced)
     fft2_shifted = fftpack.fftshift(fft2)
     magnitude_spectrum = np.abs(fft2_shifted)
 
-    # Get frequency profiles
-    center_y, center_x = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
-    horizontal_profile = magnitude_spectrum[center_y, :]
-    vertical_profile = magnitude_spectrum[:, center_x]
+    # Calculate mean before any enhancement
+    mean_freq = np.mean(magnitude_spectrum)
 
-    # Noise Analysis
-    row_profile = np.mean(normalized_image[::row_step], axis=1)
-    col_profile = np.mean(normalized_image[:, ::col_step], axis=0)
-    patches = normalized_image[::patch_size, ::patch_size]
-    noise_level = np.std(patches)
+    # Enhance frequency magnitude visualization
+    log_magnitude = np.log1p(magnitude_spectrum)
+    p2, p98 = np.percentile(log_magnitude, (2, 98))
+    magnitude_enhanced = exposure.rescale_intensity(log_magnitude, in_range=(p2, p98))
 
-    # Find peaks in frequency profiles
-    h_peaks = find_peaks(horizontal_profile, distance=20)[0]
-    v_peaks = find_peaks(vertical_profile, distance=20)[0]
+    # Compute directional analysis
+    rows, cols = magnitude_spectrum.shape
+    center_row, center_col = rows // 2, cols // 2
+    y, x = np.ogrid[-center_row:rows - center_row, -center_col:cols - center_col]
+    angles = np.arctan2(y, x)
+
+    # Compute directional profile with more bins for smoother visualization
+    angle_bins = np.linspace(-np.pi, np.pi, 181)[:-1]  # 180 bins for degrees
+    directional_profile = np.zeros_like(angle_bins)
+    for i in range(len(angle_bins)):
+        if i < len(angle_bins) - 1:
+            mask = (angles >= angle_bins[i]) & (angles < angle_bins[i + 1])
+        else:
+            mask = (angles >= angle_bins[i]) | (angles < angle_bins[0])
+        directional_profile[i] = np.mean(magnitude_spectrum[mask])
 
     return {
-        'frequency_analysis': {
-            'horizontal_peaks': horizontal_profile[h_peaks].tolist(),
-            'vertical_peaks': vertical_profile[v_peaks].tolist(),
-            'magnitude_spectrum': magnitude_spectrum,
-            'horizontal_profile': horizontal_profile,
-            'vertical_profile': vertical_profile
-        },
-        'noise_analysis': {
-            'row_variation': float(np.std(row_profile)),
-            'col_variation': float(np.std(col_profile)),
-            'noise_level': float(noise_level),
-            'profiles': (row_profile, col_profile)
-        }
-    }, normalized_image
+        'image': img_enhanced,
+        'magnitude_spectrum': magnitude_enhanced,
+        'directional_profile': directional_profile,
+        'angle_bins': np.degrees(angle_bins),  # Convert to degrees
+        'freq_distribution': log_magnitude.ravel(),
+        'mean_freq': mean_freq
+    }
 
 
 def plot_frequency_analysis(image_path):
     """
-    Create visualization of both frequency and noise analysis.
+    Create focused visualization with four key plots.
     """
-    results, normalized_image = analyze_frequencies(image_path)
+    results = analyze_frequencies(image_path)
 
-    fig = plt.figure(figsize=(15, 15))
-    gs = plt.GridSpec(3, 2, figure=fig)
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 15))
 
-    # Original image
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax1.imshow(normalized_image, cmap='gray')
-    ax1.set_title('Normalized Image')
+    # Enhanced contrast image
+    ax1.imshow(results['image'], cmap='gray')
+    ax1.set_title('Contrast Enhanced Image')
+    ax1.set_xlabel('Pixels')
+    ax1.set_ylabel('Pixels')
 
-    # FFT magnitude spectrum
-    ax2 = fig.add_subplot(gs[0, 1])
-    magnitude_spectrum = results['frequency_analysis']['magnitude_spectrum']
-    log_spectrum = np.log1p(magnitude_spectrum)
-    ax2.imshow(log_spectrum, cmap='gray')
-    ax2.set_title('FFT Magnitude Spectrum')
+    # Enhanced frequency magnitude
+    im2 = ax2.imshow(results['magnitude_spectrum'], cmap='viridis')
+    ax2.set_title(f'Frequency Magnitude\nMean: {results["mean_freq"]:.3f}')
+    plt.colorbar(im2, ax=ax2)
 
-    # Horizontal frequency profile
-    ax3 = fig.add_subplot(gs[1, :])
-    ax3.plot(results['frequency_analysis']['horizontal_profile'])
-    ax3.set_title(f"Horizontal Frequency Profile\nRow Variation: {results['noise_analysis']['row_variation']:.3f}")
+    # Frequency distribution histogram
+    ax3.hist(results['freq_distribution'], bins=100, color='blue', alpha=0.7)
+    ax3.set_title('Frequency Distribution')
+    ax3.set_xlabel('Log Magnitude')
+    ax3.set_ylabel('Count')
 
-    # Vertical frequency profile
-    ax4 = fig.add_subplot(gs[2, 0])
-    ax4.plot(results['frequency_analysis']['vertical_profile'])
-    ax4.set_title(f"Vertical Frequency Profile\nColumn Variation: {results['noise_analysis']['col_variation']:.3f}")
-
-    # Noise distribution
-    ax5 = fig.add_subplot(gs[2, 1])
-    noise_profile = results['noise_analysis']['profiles'][0]
-    ax5.hist(noise_profile, bins=50)
-    ax5.set_title(f"Noise Distribution\nNoise Level: {results['noise_analysis']['noise_level']:.3f}")
+    # Directional strength
+    ax4.plot(results['angle_bins'], results['directional_profile'])
+    ax4.set_title('Directional Frequency Strength')
+    ax4.set_xlabel('Angle (degrees)')
+    ax4.set_ylabel('Magnitude')
+    ax4.grid(True)
 
     plt.tight_layout()
     return fig, results
 
 
 def analyze_microscopy_frequencies(image_path):
-    """Wrapper function for easy analysis of a single image"""
-    results, _ = analyze_frequencies(image_path)
-    fig = plot_frequency_analysis(image_path)
-
-    print("\nAnalysis Results:")
-    print(f"Row Variation: {results['noise_analysis']['row_variation']:.3f}")
-    print(f"Column Variation: {results['noise_analysis']['col_variation']:.3f}")
-    print(f"Noise Level: {results['noise_analysis']['noise_level']:.3f}")
-    print(f"Number of significant horizontal peaks: {len(results['frequency_analysis']['horizontal_peaks'])}")
-    print(f"Number of significant vertical peaks: {len(results['frequency_analysis']['vertical_peaks'])}")
-
+    """Wrapper function for frequency analysis"""
+    fig, results = plot_frequency_analysis(image_path)
     return results, fig
+
+
 
 
 if __name__ == "__main__":
     try:
-        image_path = '/EXP2111_A06_D#07_T0003_C01.tif'
+        image_path = '/Users/guidoputignano/PycharmProjects/Cellgroup_new/Cellgroup_up/notebooks/toy_data/EXP2111_A06_D#07_T0003_C01.tif'  # Replace with your image path
         results, fig = analyze_microscopy_frequencies(image_path)
         plt.show()
 
