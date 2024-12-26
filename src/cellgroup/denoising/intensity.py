@@ -1,30 +1,28 @@
 """
 Module for analyzing light intensity patterns in fluorescence microscopy images.
 """
-
+import logging
+mpl_logger = logging.getLogger('matplotlib')
+mpl_logger.setLevel(logging.WARNING)  # Only show WARNING and higher messages
 import numpy as np
 from scipy import fftpack
+from skimage import io, exposure
 from scipy.ndimage import gaussian_filter
 import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+from functools import lru_cache
 import concurrent.futures
-from .utils import load_and_normalize_image
+
+
+# Cache for image reading
+@lru_cache(maxsize=32)
+def cached_imread(image_path):
+    return io.imread(image_path)
 
 
 def fast_local_statistics(img, window_size):
     """
-    Calculate local statistics using numpy operations.
-
-    Parameters
-    ----------
-    img : ndarray
-        Input image
-    window_size : int
-        Size of the local window
-
-    Returns
-    -------
-    tuple
-        (local_mean, local_std) arrays
+    Optimized calculation of local statistics using numpy operations.
     """
     height, width = img.shape
     local_std = np.zeros_like(img, dtype=np.float32)
@@ -35,14 +33,17 @@ def fast_local_statistics(img, window_size):
             window = img[i:i + window_size, j:j + window_size]
             mean_val = np.mean(window)
             std_val = np.std(window)
+
             local_mean[i:i + window_size, j:j + window_size] = mean_val
             local_std[i:i + window_size, j:j + window_size] = std_val
 
     return local_mean, local_std
 
 
-def calculate_coefficient_variation(patches):
-    """Calculate coefficient of variation for image patches."""
+def fast_coefficient_variation(patches):
+    """
+    Optimized calculation of coefficient of variation.
+    """
     local_means = np.mean(patches, axis=(2, 3))
     local_stds = np.std(patches, axis=(2, 3))
 
@@ -53,10 +54,31 @@ def calculate_coefficient_variation(patches):
     return local_cv
 
 
-def perform_noise_analysis(img):
-    """Perform comprehensive noise analysis."""
+def perform_fft_analysis(img):
+    """
+    Optimized FFT analysis.
+    """
+    fft2 = fftpack.fft2(img)
+    fft2_shifted = fftpack.fftshift(fft2)
+    magnitude_spectrum = np.abs(fft2_shifted)
+
+    center_y, center_x = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
+    horizontal_profile = magnitude_spectrum[center_y, :].copy()
+    vertical_profile = magnitude_spectrum[:, center_x].copy()
+
+    h_peaks = find_peaks(horizontal_profile, distance=20)[0]
+    v_peaks = find_peaks(vertical_profile, distance=20)[0]
+
+    return magnitude_spectrum, horizontal_profile, vertical_profile, h_peaks, v_peaks
+
+
+def analyze_noise_characteristics(img):
+    """
+    Optimized noise analysis.
+    """
     window_size = 16
     smoothed = gaussian_filter(img, sigma=window_size / 4)
+
     local_mean, local_std = fast_local_statistics(img, window_size)
 
     patch_shape = (64, 64)
@@ -71,36 +93,26 @@ def perform_noise_analysis(img):
                  img.strides[1])
     )
 
-    local_cv = calculate_coefficient_variation(patches)
+    local_cv = fast_coefficient_variation(patches)
+
     return local_mean, local_std, local_cv
 
 
 def analyze_light_intensity(image_path):
     """
-    Analyze light intensity patterns with parallel processing.
-
-    Parameters
-    ----------
-    image_path : str
-        Path to the microscopy image
-
-    Returns
-    -------
-    dict
-        Metrics of intensity analysis
-    matplotlib.figure.Figure
-        Visualization figure
+    Main analysis function with parallel processing.
     """
-    # Load and normalize image using utility function
-    img_rescaled, img_float = load_and_normalize_image(image_path)
+    img = cached_imread(image_path)
+    if img.ndim > 2:
+        img = img.mean(axis=2)
+    img_float = img.astype(np.float32)
 
-    if img_float.ndim > 2:
-        img_float = img_float.mean(axis=2)
+    height, width = img_float.shape
+    magnitude_spectrum = np.zeros((height, width), dtype=np.float32)
 
-    # Perform analysis with parallel processing
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         fft_future = executor.submit(perform_fft_analysis, img_float)
-        noise_future = executor.submit(perform_noise_analysis, img_float)
+        noise_future = executor.submit(analyze_noise_characteristics, img_float)
 
         fft_results = fft_future.result()
         noise_results = noise_future.result()
@@ -108,44 +120,13 @@ def analyze_light_intensity(image_path):
     magnitude_spectrum, horizontal_profile, vertical_profile, h_peaks, v_peaks = fft_results
     local_mean, local_std, local_cv = noise_results
 
-    # Create visualization
-    fig = create_visualization(
-        img_float,
-        magnitude_spectrum,
-        horizontal_profile,
-        vertical_profile,
-        local_mean,
-        local_std,
-        local_cv
-    )
+    fig = create_visualization(img, magnitude_spectrum, horizontal_profile,
+                               vertical_profile, local_mean, local_std, local_cv)
 
-    # Calculate metrics
-    metrics = calculate_metrics(
-        img_float,
-        horizontal_profile,
-        vertical_profile,
-        h_peaks,
-        v_peaks,
-        local_cv
-    )
+    metrics = calculate_metrics(img_float, horizontal_profile,
+                                vertical_profile, h_peaks, v_peaks, local_cv)
 
     return metrics, fig
-
-
-def perform_fft_analysis(img):
-    """Perform FFT analysis on the image."""
-    fft2 = fftpack.fft2(img)
-    fft2_shifted = fftpack.fftshift(fft2)
-    magnitude_spectrum = np.abs(fft2_shifted)
-
-    center_y, center_x = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
-    horizontal_profile = magnitude_spectrum[center_y, :].copy()
-    vertical_profile = magnitude_spectrum[:, center_x].copy()
-
-    h_peaks = find_peaks(horizontal_profile, distance=20)[0]
-    v_peaks = find_peaks(vertical_profile, distance=20)[0]
-
-    return magnitude_spectrum, horizontal_profile, vertical_profile, h_peaks, v_peaks
 
 
 def create_visualization(img, magnitude_spectrum, horizontal_profile,
@@ -205,4 +186,3 @@ def calculate_metrics(img_float, horizontal_profile, vertical_profile,
         'intensity_range': (float(np.min(img_float)), float(np.max(img_float))),
         'signal_to_noise': float(np.mean(img_float) / np.std(img_float)) if np.std(img_float) != 0 else float('inf')
     }
-

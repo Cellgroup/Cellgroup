@@ -184,7 +184,7 @@ def calculate_metrics(img_float, horizontal_profile, vertical_profile,
 
 if __name__ == "__main__":
     try:
-        image_path = '/EXP2111_A06_D#07_T0003_C01.tif'  # Replace with your image path
+        image_path = '/Users/guidoputignano/PycharmProjects/Cellgroup_new/Cellgroup_up/EXP2111_A06_D#07_T0003_C01.tif'  # Replace with your image path
         metrics, fig = analyze_light_intensity(image_path)
 
         print("\nImage Analysis Metrics:")
