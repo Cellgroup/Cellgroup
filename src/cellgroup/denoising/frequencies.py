@@ -2,75 +2,110 @@
 Module for analyzing frequency patterns in fluorescence microscopy images.
 """
 
-import numpy as np
+
 from .utils import load_and_normalize_image, perform_fft_analysis
 
+import numpy as np
+from scipy import fftpack
+from skimage import io, exposure
+import matplotlib.pyplot as plt
+import tifffile
 
-def analyze_frequencies(image_path, row_step=10, col_step=10, patch_size=50):
+
+def load_and_enhance_image(image_path):
+    """Load and enhance image contrast."""
+    img = tifffile.imread(image_path)
+    img = img.astype(float)
+    p2, p98 = np.percentile(img, (2, 98))
+    img_enhanced = exposure.rescale_intensity(img, in_range=(p2, p98))
+    return img_enhanced
+
+
+def analyze_frequencies_metrics(image_path):
     """
-    Analyze both spatial frequencies and noise patterns.
-
-    Parameters
-    ----------
-    image_path : str
-        Path to the microscopy image
-    row_step : int, optional
-        Step size for row sampling
-    col_step : int, optional
-        Step size for column sampling
-    patch_size : int, optional
-        Size of patches for noise analysis
-
-    Returns
-    -------
-    dict
-        Analysis results containing frequency and noise measurements
-    ndarray
-        Normalized image
+    Focused frequency analysis showing key aspects of the frequency domain.
     """
-    # Load and normalize image using utility function
-    normalized_image, _ = load_and_normalize_image(image_path)
+    # Load and enhance image
+    img_enhanced = load_and_enhance_image(image_path)
 
-    # Get FFT analysis results using utility function
-    fft_results = perform_fft_analysis(normalized_image)
+    # FFT Analysis
+    fft2 = fftpack.fft2(img_enhanced)
+    fft2_shifted = fftpack.fftshift(fft2)
+    magnitude_spectrum = np.abs(fft2_shifted)
 
-    # Noise Analysis (specific to this module)
-    row_profile = np.mean(normalized_image[::row_step], axis=1)
-    col_profile = np.mean(normalized_image[:, ::col_step], axis=0)
-    patches = normalized_image[::patch_size, ::patch_size]
-    noise_level = np.std(patches)
+    # Calculate mean before any enhancement
+    mean_freq = np.mean(magnitude_spectrum)
+
+    # Enhance frequency magnitude visualization
+    log_magnitude = np.log1p(magnitude_spectrum)
+    p2, p98 = np.percentile(log_magnitude, (2, 98))
+    magnitude_enhanced = exposure.rescale_intensity(log_magnitude, in_range=(p2, p98))
+
+    # Compute directional analysis
+    rows, cols = magnitude_spectrum.shape
+    center_row, center_col = rows // 2, cols // 2
+    y, x = np.ogrid[-center_row:rows - center_row, -center_col:cols - center_col]
+    angles = np.arctan2(y, x)
+
+    # Compute directional profile with more bins for smoother visualization
+    angle_bins = np.linspace(-np.pi, np.pi, 181)[:-1]  # 180 bins for degrees
+    directional_profile = np.zeros_like(angle_bins)
+    for i in range(len(angle_bins)):
+        if i < len(angle_bins) - 1:
+            mask = (angles >= angle_bins[i]) & (angles < angle_bins[i + 1])
+        else:
+            mask = (angles >= angle_bins[i]) | (angles < angle_bins[0])
+        directional_profile[i] = np.mean(magnitude_spectrum[mask])
 
     return {
-        'frequency_analysis': {
-            'horizontal_peaks': fft_results['horizontal_profile'][fft_results['horizontal_peaks']].tolist(),
-            'vertical_peaks': fft_results['vertical_profile'][fft_results['vertical_peaks']].tolist(),
-            'magnitude_spectrum': fft_results['magnitude_spectrum'],
-            'horizontal_profile': fft_results['horizontal_profile'],
-            'vertical_profile': fft_results['vertical_profile']
-        },
-        'noise_analysis': {
-            'row_variation': float(np.std(row_profile)),
-            'col_variation': float(np.std(col_profile)),
-            'noise_level': float(noise_level),
-            'profiles': (row_profile, col_profile)
-        }
-    }, normalized_image
+        'image': img_enhanced,
+        'magnitude_spectrum': magnitude_enhanced,
+        'directional_profile': directional_profile,
+        'angle_bins': np.degrees(angle_bins),  # Convert to degrees
+        'freq_distribution': log_magnitude.ravel(),
+        'mean_freq': mean_freq
+    }
 
 
-# Visualization function can stay the same as it's specific to this module
 def plot_frequency_analysis(image_path):
-    """Create visualization of both frequency and noise analysis."""
-    results, normalized_image = analyze_frequencies(image_path)
+    """
+    Create focused visualization with four key plots.
+    """
+    results = analyze_frequencies_metrics(image_path)
 
-    # Rest of your plotting code stays the same...
-    # (The plotting code is correctly separated from the analysis)
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 15))
+
+    # Enhanced contrast image
+    ax1.imshow(results['image'], cmap='gray')
+    ax1.set_title('Contrast Enhanced Image')
+    ax1.set_xlabel('Pixels')
+    ax1.set_ylabel('Pixels')
+
+    # Enhanced frequency magnitude
+    im2 = ax2.imshow(results['magnitude_spectrum'], cmap='viridis')
+    ax2.set_title(f'Frequency Magnitude\nMean: {results["mean_freq"]:.3f}')
+    plt.colorbar(im2, ax=ax2)
+
+    # Frequency distribution histogram
+    ax3.hist(results['freq_distribution'], bins=100, color='blue', alpha=0.7)
+    ax3.set_title('Frequency Distribution')
+    ax3.set_xlabel('Log Magnitude')
+    ax3.set_ylabel('Count')
+
+    # Directional strength
+    ax4.plot(results['angle_bins'], results['directional_profile'])
+    ax4.set_title('Directional Frequency Strength')
+    ax4.set_xlabel('Angle (degrees)')
+    ax4.set_ylabel('Magnitude')
+    ax4.grid(True)
+
+    plt.tight_layout()
+    return fig, results
 
 
-def analyze_microscopy_frequencies(image_path):
-    """Wrapper function for easy analysis of a single image"""
-    results, _ = analyze_frequencies(image_path)
-    fig = plot_frequency_analysis(image_path)
-
-    # Rest of your print statements stay the same...
-
+def analyze_frequencies(image_path):
+    """Wrapper function for frequency analysis"""
+    fig, results = plot_frequency_analysis(image_path)
     return results, fig
+
+

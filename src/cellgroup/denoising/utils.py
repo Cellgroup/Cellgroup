@@ -138,22 +138,43 @@ def analyze_light_intensity(image_path):
 
     # Use img_rescaled for visualization and img_float for analysis
 
+
 def perform_fft_analysis(img):
     """
-    Optimized FFT analysis.
+    Optimized FFT analysis that returns results in a dictionary format.
+
+    Parameters
+    ----------
+    img : ndarray
+        Input image array
+
+    Returns
+    -------
+    dict
+        Dictionary containing FFT analysis results
     """
+    # Perform FFT
     fft2 = fftpack.fft2(img)
     fft2_shifted = fftpack.fftshift(fft2)
     magnitude_spectrum = np.abs(fft2_shifted)
 
+    # Extract profiles from center
     center_y, center_x = magnitude_spectrum.shape[0] // 2, magnitude_spectrum.shape[1] // 2
     horizontal_profile = magnitude_spectrum[center_y, :].copy()
     vertical_profile = magnitude_spectrum[:, center_x].copy()
 
+    # Find peaks
     h_peaks = find_peaks(horizontal_profile, distance=20)[0]
     v_peaks = find_peaks(vertical_profile, distance=20)[0]
 
-    return magnitude_spectrum, horizontal_profile, vertical_profile, h_peaks, v_peaks
+    # Return as dictionary
+    return {
+        'magnitude_spectrum': magnitude_spectrum,
+        'horizontal_profile': horizontal_profile,
+        'vertical_profile': vertical_profile,
+        'horizontal_peaks': h_peaks,
+        'vertical_peaks': v_peaks
+    }
 
 
 
