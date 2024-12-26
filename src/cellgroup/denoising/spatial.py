@@ -3,9 +3,6 @@ Module for analyzing spatial patterns in fluorescence microscopy images.
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.ndimage import gaussian_filter
-import numpy as np
 from skimage import exposure
 import matplotlib.pyplot as plt
 import tifffile
@@ -19,7 +16,7 @@ def load_and_normalize_image(image_path):
     return normalized_image, image_float
 
 
-def analyze_spatial_variations(normalized_image, row_step=10, col_step=10):
+def analyze_spatial_variations_metrics(normalized_image, row_step=10, col_step=10):
     row_profile = np.mean(normalized_image[::row_step], axis=1)
     col_profile = np.mean(normalized_image[:, ::col_step], axis=0)
 
@@ -37,7 +34,7 @@ def analyze_spatial_variations(normalized_image, row_step=10, col_step=10):
 
 def plot_spatial_analysis(image_path):
     normalized_image, _ = load_and_normalize_image(image_path)
-    results = analyze_spatial_variations(normalized_image)
+    results = analyze_spatial_variations_metrics(normalized_image)
 
     # Create figure with 3 horizontally arranged subplots
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
@@ -67,7 +64,7 @@ def plot_spatial_analysis(image_path):
     return fig, results
 
 
-def analyze_microscopy_spatial(image_path):
+def analyze_spatial_variations(image_path):
     fig, results = plot_spatial_analysis(image_path)
     print("\nSpatial Analysis Results:")
     print(f"Row Variation: {results['spatial_stats']['row_variation']:.3f}")
