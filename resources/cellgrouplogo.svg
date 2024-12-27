@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+    <!-- Background hexagon -->
+    <path d="M200,50 L340,125 L340,275 L200,350 L60,275 L60,125 Z" 
+          fill="#4B8BBE" stroke="#306998" stroke-width="8"/>
+    
+    <!-- Cell cluster -->
+    <g transform="translate(200, 200)">
+        <!-- Largest cell -->
+        <circle cx="-30" cy="0" r="70" fill="#FFD43B" stroke="white" stroke-width="6"/>
+        
+        <!-- Medium cell -->
+        <circle cx="60" cy="-40" r="50" fill="#FFD43B" stroke="white" stroke-width="6"/>
+        
+        <!-- Smallest cell -->
+        <circle cx="50" cy="50" r="40" fill="#FFD43B" stroke="white" stroke-width="6"/>
+        
+        <!-- Connecting lines -->
+        <line x1="-30" y1="0" x2="60" y2="-40" stroke="white" stroke-width="6"/>
+        <line x1="60" y1="-40" x2="50" y2="50" stroke="white" stroke-width="6"/>
+        <line x1="-30" y1="0" x2="50" y2="50" stroke="white" stroke-width="6"/>
+        
+        <!-- Cell centers/nuclei -->
+        <circle cx="-30" cy="0" r="20" fill="white" opacity="0.3"/>
+        <circle cx="60" cy="-40" r="15" fill="white" opacity="0.3"/>
+        <circle cx="50" cy="50" r="12" fill="white" opacity="0.3"/>
+    </g>
+</svg>
