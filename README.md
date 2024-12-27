@@ -22,7 +22,7 @@
 
 </div>
 
-![Cellgroup Overview](docs/images/overview.png)
+![Cellgroup Overview](resources/Cellgroup.png)
 
 ## 🌟 Highlights
 
