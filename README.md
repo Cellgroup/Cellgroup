@@ -1,5 +1,3 @@
-# Cellgroup
-
 <div align="center">
 <img src="resources/cellgroup-logo-png.png" alt="Cellgroup Logo" width="200">
 
