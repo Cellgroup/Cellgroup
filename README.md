@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="resources/Cellgrouplogotitle.png" alt="Cellgroup Logo with Title" width="200"/>
+  <img src="resources/Cellgrouplogotitle.png" alt="Cellgroup Logo with Title" width="1000"/>
 
 
 # 🔬 Cellgroup
