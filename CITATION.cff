@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "Cellgroup - A library to cluster and analyse cells in wells"
+type: software
+authors:
+  - family-names: Putignano
+    given-names: Guido
+  - family-names: Carrara
+    given-names: Federico
+  - family-names: D'Ascenzo
+    given-names: Davide
+repository-code: "https://github.com/guidoputignano/Cellgroup"
+url: "https://github.com/guidoputignano/Cellgroup"
+abstract: >-
+  The rapid advancement of cell therapy and regenerative medicine has intensified
+  the need for precise cellular analysis, with fluorescent microscopy serving as a
+  primary investigative tool. Cellgroup is a computational library that addresses
+  challenges through an integrated approach to cell segmentation and cluster analysis
+  in well-plate images. The library combines state-of-the-art deep learning-based
+  denoising with dedicated analytical modules for intensity measurement, morphological
+  characterization, correlation mapping, and temporal tracking.
+keywords:
+  - cell-analysis
+  - fluorescent-microscopy
+  - image-segmentation
+  - clustering
+  - python
+license: MIT  # Replace with actual license
+version: 1.0.0
+date-released: "2024-12-11"
+preferred-citation:
+  type: library
+  title: "Cellgroup - A library to cluster and analyse cells in wells"
+  authors:
+    - family-names: Putignano
+      given-names: Guido
+    - family-names: Carrara
+      given-names: Federico
+    - family-names: D'Ascenzo
+      given-names: Davide
+  year: 2024
+  institutions:
+    - name: "ETH Zürich"
+      department: "Biosystems Science and Engineering"
+    - name: "Human Technopole"
+      department: "Computational Biology"
+    - name: "University of Milan"
+      department: "Informatics"

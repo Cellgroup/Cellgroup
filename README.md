@@ -163,20 +163,9 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
-## 📜 Citation
-
-```bibtex
-@article{putignano2024cellgroup,
-  title={Cellgroup - A library to cluster and analyse cells in wells},
-  author={Putignano, Guido; Carrara, Federico; D'Ascenzo, Davide},
-  journal={ETH Zürich},
-  year={2024}
-}
-```
-
 ## 📄 License
 
-This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🌟 Star History
 
