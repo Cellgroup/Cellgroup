@@ -2,15 +2,21 @@ from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import BaseModel, ConfigDict
 
 from cellgroup.synthetic.nucleus import Nucleus
 from cellgroup.synthetic.space import Space
 
 
-class NucleusFluorophoreDistribution(Nucleus):
+class NucleusFluorophoreDistribution(BaseModel):
     """Defines a fluorophore density distribution over the nucleus."""
 
-    fluorophore_density: NDArray
+    model_config = ConfigDict(validate_assignment=True, validate_default=True)
+    
+    nucleus: Nucleus
+    """Nucleus object on which FP distribution is rendered."""
+    
+    fluorophore_density: NDArray #TODO: not clear
     """Fluorophore density distribution."""
 
     distribution_type: Literal["gaussian", "uniform", "ring"] = "gaussian"
@@ -29,7 +35,7 @@ class NucleusFluorophoreDistribution(Nucleus):
         y, x = np.mgrid[0:shape[0], 0:shape[1]]
         pos = np.dstack((x, y))
 
-        # Create covariance matrix for elliptical distribution
+        # --- Create covariance matrix for elliptical distribution
         major_sigma = self.Major / 4  # Convert radius to standard deviation
         minor_sigma = self.Minor / 4
 
@@ -44,8 +50,8 @@ class NucleusFluorophoreDistribution(Nucleus):
         cov = np.array([[major_sigma ** 2, 0], [0, minor_sigma ** 2]])
         cov = rot_matrix @ cov @ rot_matrix.T
 
-        # Generate distribution
-        rv = multivariate_normal([self.XM, self.YM], cov)
+        # --- Generate distribution
+        rv = np.random.normal([self.XM, self.YM], cov)
         distribution = rv.pdf(pos)
 
         # Scale to desired intensity range
@@ -73,8 +79,8 @@ class NucleusFluorophoreDistribution(Nucleus):
         distances = np.sqrt(dx_scaled ** 2 + dy_scaled ** 2)
 
         # Create ring pattern
-        ring_radius = 0.7  # Position of peak intensity
-        ring_width = 0.2  # Width of the ring
+        ring_radius = 0.7  # Position of peak intensity #TODO: make this a parameter
+        ring_width = 0.2  # Width of the ring #TODO: make this a parameter
         distribution = np.exp(-((distances - ring_radius) / ring_width) ** 2)
 
         # Scale to desired intensity range
@@ -102,7 +108,7 @@ class NucleusFluorophoreDistribution(Nucleus):
         distances = np.sqrt(dx_scaled ** 2 + dy_scaled ** 2)
 
         # Create soft mask
-        sigma = 0.1  # Controls edge softness
+        sigma = 0.1  # Controls edge softness #TODO: make this a parameter
         distribution = 1 / (1 + np.exp((distances - 1) / sigma))
 
         # Scale to desired intensity range
@@ -111,7 +117,7 @@ class NucleusFluorophoreDistribution(Nucleus):
         return distribution
 
     def render(self, space: Space) -> NDArray:
-        """Render the nucleus, given its properties and the space object."""
+        """Render the nucleus FP distribution, given its properties and the space object."""
         if not self.is_alive:
             return np.zeros(space.space[:2])
 
@@ -135,6 +141,8 @@ class NucleusFluorophoreDistribution(Nucleus):
 
         return distribution
 
+    #TODO: I don't think this is necessary, as we anyway need a nucleus to generate a
+    # fluorophore distribution. Remove ?
     @classmethod
     def create_from_nucleus(cls,
                             nucleus: Nucleus,
