@@ -1,3 +1,3 @@
 from .cluster import Cluster
-from .nucleus import Nucleus, NucleusFluorophoreDistribution
+from .nucleus import Nucleus
 from .space import Space

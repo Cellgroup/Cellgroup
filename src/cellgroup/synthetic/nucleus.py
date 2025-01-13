@@ -1,15 +1,28 @@
 from __future__ import annotations
-from pydantic import BaseModel, Field, model_validator
+
+from typing import Optional, Literal
+
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from numpy.typing import NDArray
 from scipy.stats import multivariate_normal
-from typing import Optional, Tuple
-from cellgroup.synthetic import Nucleus, Space 
 
+from cellgroup.synthetic.nucleus import Nucleus
+from cellgroup.synthetic.space import Space 
+
+#TODO: we should consider supporting 3D simulation from the start
 
 class Nucleus(BaseModel):
     """Defines a nucleus instance with minimal core properties and growth dynamics."""
 
+    # TODO: refactor names -> capital letters not common in Python
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True, # TODO: why is this needed?
+        validate_assignment=True,
+        validate_default=True,
+    )
+    
     # Essential identification and tracking
     id: int = Field(description="Unique nucleus ID")
     Labels: int = Field(description="Cluster label")
@@ -23,10 +36,16 @@ class Nucleus(BaseModel):
     Minor: float = Field(description="Length of minor axis")
     Angle: float = Field(description="Orientation angle in degrees")
 
+    # TODO: descriptions can be more detailed and put in """ """ under Field
+    
     # Core intensity properties
-    RawIntDen: float = Field(description="Raw integrated density")
+    RawIntDen: float = Field(description="Raw integrated density") # TODO: not clear
 
+    # TODO: in some simulations we might want to disable some properties.
+    # Therefore we need to put `Optional` for all properties and set default to None.
+    
     # Growth and death properties
+    # TODO: it would be nice to set ranges for these values to avoid unrealistic values
     growth_rate: float = Field(default=0.1, description="Base growth rate")
     max_size: float = Field(default=1000.0, description="Maximum area")
     min_division_size: float = Field(default=500.0, description="Minimum size for division")
@@ -39,9 +58,6 @@ class Nucleus(BaseModel):
     death_prob: float = Field(0.0, ge=0.0, le=1.0)
     division_prob: float = Field(0.0, ge=0.0, le=1.0)
 
-    class Config:
-        arbitrary_types_allowed = True
-
     # --- Calculated geometric properties ---
     @property
     def Area(self) -> float:
@@ -49,36 +65,41 @@ class Nucleus(BaseModel):
         return np.pi * (self.Major / 2) * (self.Minor / 2)
 
     @property
-    def AR(self) -> float:
+    def AspectRatio(self) -> float:
         """Calculate aspect ratio."""
         return self.Major / self.Minor
 
     @property
-    def Round(self) -> float:
+    def Roundness(self) -> float:
         """Calculate roundness (4*Area/(π*Major^2))."""
         return (4 * self.Area) / (np.pi * self.Major ** 2)
 
     @property
+    def perimeter(self) -> float:
+        """Calculate perimeter using Ramanujan approximation."""
+        a = self.Major
+        b = self.Minor
+        h = ((a - b) / (a + b)) ** 2
+        return np.pi * (a + b) * (1 + (3 * h) / (10 + np.sqrt(4 - 3 * h)))
+    
+    @property
     def Circ(self) -> float:
         """Calculate circularity (4π*Area/perimeter^2)."""
-        perimeter = np.pi * (self.Major + self.Minor) * (
-                    1 + (3 * ((self.Major - self.Minor) / (self.Major + self.Minor)) ** 2) / (
-                        10 + np.sqrt(4 - 3 * ((self.Major - self.Minor) / (self.Major + self.Minor)) ** 2)))
-        return (4 * np.pi * self.Area) / (perimeter ** 2)
+        return (4 * np.pi * self.Area) / (self.perimeter ** 2)
 
     @property
     def Solidity(self) -> float:
         """Approximate solidity (area/convex hull area)."""
-        return 1.0
+        raise NotImplementedError
 
     # --- Calculated intensity properties ---
     @property
-    def IntDen(self) -> float:
+    def IntDen(self) -> float: # TODO: not clear
         """Calculate integrated density."""
         return self.RawIntDen
 
     @property
-    def Mean(self) -> float:
+    def Mean(self) -> float: # TODO: naming is misleading
         """Calculate mean intensity."""
         return self.RawIntDen / self.Area
 
@@ -99,7 +120,8 @@ class Nucleus(BaseModel):
         growth_increment = self.growth_rate * size_factor * age_factor
 
         # Add some random variation
-        noise = np.random.normal(0, 0.02)  # 2% random variation
+        noise = np.random.normal(0, 0.02)  # 2% random variation 
+        #TODO: check if this is a good value to hardcode, or if it should be a parameter
 
         return 1 + growth_increment + noise
 
@@ -109,9 +131,11 @@ class Nucleus(BaseModel):
             return False
 
         # Death conditions
-        if (self.Area < self.min_viable_size or  # Too small
-                self.eta > self.max_age or  # Too old
-                np.random.random() < self.death_prob):  # Random death
+        if (
+            self.Area < self.min_viable_size or  # Too small
+            self.eta > self.max_age or  # Too old
+            np.random.random() < self.death_prob
+        ):  # Random death
             return True
 
         return False
@@ -119,13 +143,13 @@ class Nucleus(BaseModel):
     def die(self):
         """Handle death of nucleus."""
         self.is_alive = False
-        # Rapid size decrease
+        # Rapid size decrease #TODO: not clear
         shrink_factor = 0.5
         self.Major *= shrink_factor
         self.Minor *= shrink_factor
         self.RawIntDen *= shrink_factor
 
-    def update(self) -> bool:
+    def update(self) -> bool: #TODO: is there a reason why we want to return a boolean?
         """Update nucleus properties for one timestep. Returns False if nucleus dies."""
         if not self.is_alive:
             return False
@@ -133,7 +157,7 @@ class Nucleus(BaseModel):
         # Increment age
         self.eta += 1
 
-        # Check for death
+        # Check for death #TODO: this is ok, but can be made more readable
         if self._check_death():
             self.die()
             return False
@@ -142,6 +166,7 @@ class Nucleus(BaseModel):
         growth_factor = self._calculate_growth_factor()
 
         # Update size while maintaining aspect ratio
+        #TODO: also implement non-isotropic growth
         self.Major *= np.sqrt(growth_factor)
         self.Minor *= np.sqrt(growth_factor)
 
@@ -149,14 +174,18 @@ class Nucleus(BaseModel):
         self.RawIntDen *= growth_factor
 
         # Random movement (Brownian motion)
-        diffusion_coefficient = 1.0  # Can be adjusted
+        diffusion_coefficient = 1.0  # Can be adjusted #TODO: move into parameters
         dx = np.random.normal(0, np.sqrt(2 * diffusion_coefficient))
         dy = np.random.normal(0, np.sqrt(2 * diffusion_coefficient))
         self.XM += dx
         self.YM += dy
+        # TODO: checks to implement:
+        # - make sure nucleus does not leave the image Space
+        # - make sure nucleus does not overlap with other nuclei
+        # - make sure nucleus does not exit the cluster (or maybe it could?)
 
         # Random rotation
-        rotation_rate = 0.1  # Degrees per timestep
+        rotation_rate = 0.1  # Degrees per timestep #TODO: move into parameters
         dangle = np.random.normal(0, rotation_rate)
         self.Angle = (self.Angle + dangle) % 360
 
@@ -171,14 +200,20 @@ class Nucleus(BaseModel):
         self.death_prob = min(0.8, age_factor + stress_factor)
 
         return True
+
     def divide(self) -> "Nucleus":
+        # TODO: shouldn't we return a pair of `Nucleus` and make mother die?
+        # This is also a biological question. Whatever makes more sense from a 
+        # biological perspective is the better choice.
         """Divide nucleus into two daughter nuclei if conditions are met."""
         if self.Area < self.min_division_size or np.random.random() > self.division_prob:
             return self
 
         # Create daughter nucleus with same properties
         daughter = self.model_copy()
-        daughter.id = self.id + 1000
+        daughter.id = self.id + 1000 
+        # TODO: not clear -> do we want a hash function that generates unique IDs maybe?
+        # Could be useful to retrieve nuclei then.
         daughter.eta = 0
         daughter.lineage = self.lineage + [self.id]
 
@@ -186,7 +221,7 @@ class Nucleus(BaseModel):
         division_angle = np.radians(self.Angle + 90)
         displacement = self.Minor / 2
 
-        # Calculate new positions
+        # Calculate new positionsc #TODO: not clear
         dx = displacement * np.cos(division_angle)
         dy = displacement * np.sin(division_angle)
 
@@ -224,159 +259,7 @@ class Nucleus(BaseModel):
             Minor=measurements['Minor'],
             Angle=measurements['Angle'],
             RawIntDen=measurements['RawIntDen']
-        )
-
-
-
-
-class NucleusFluorophoreDistribution(Nucleus):
-    """Defines a fluorophore density distribution over the nucleus."""
-
-    fluorophore_density: NDArray
-    """Fluorophore density distribution."""
-
-    distribution_type: str = "gaussian"  # or "uniform", "ring"
-
-    # Distribution parameters
-    intensity_center: float = 1.0  # Relative intensity at center
-    intensity_edge: float = 0.3  # Relative intensity at edge
-    noise_std: float = 0.1  # Standard deviation of noise
-    background_level: float = 0.05  # Background intensity level
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    def _generate_gaussian_distribution(self, shape: Tuple[int, int]) -> NDArray:
-        """Generate Gaussian fluorophore distribution."""
-        y, x = np.mgrid[0:shape[0], 0:shape[1]]
-        pos = np.dstack((x, y))
-
-        # Create covariance matrix for elliptical distribution
-        major_sigma = self.Major / 4  # Convert radius to standard deviation
-        minor_sigma = self.Minor / 4
-
-        # Rotation matrix
-        theta = np.radians(self.Angle)
-        rot_matrix = np.array([
-            [np.cos(theta), -np.sin(theta)],
-            [np.sin(theta), np.cos(theta)]
-        ])
-
-        # Create covariance matrix
-        cov = np.array([[major_sigma ** 2, 0], [0, minor_sigma ** 2]])
-        cov = rot_matrix @ cov @ rot_matrix.T
-
-        # Generate distribution
-        rv = multivariate_normal([self.XM, self.YM], cov)
-        distribution = rv.pdf(pos)
-
-        # Scale to desired intensity range
-        distribution = (distribution - distribution.min()) / (distribution.max() - distribution.min())
-        distribution = self.intensity_edge + distribution * (self.intensity_center - self.intensity_edge)
-
-        return distribution
-
-    def _generate_ring_distribution(self, shape: Tuple[int, int]) -> NDArray:
-        """Generate ring-like fluorophore distribution."""
-        y, x = np.mgrid[0:shape[0], 0:shape[1]]
-
-        # Calculate distances from center
-        dx = x - self.XM
-        dy = y - self.YM
-
-        # Apply rotation
-        theta = np.radians(self.Angle)
-        dx_rot = dx * np.cos(theta) + dy * np.sin(theta)
-        dy_rot = -dx * np.sin(theta) + dy * np.cos(theta)
-
-        # Scale to create elliptical distance
-        dx_scaled = dx_rot / (self.Major / 2)
-        dy_scaled = dy_rot / (self.Minor / 2)
-        distances = np.sqrt(dx_scaled ** 2 + dy_scaled ** 2)
-
-        # Create ring pattern
-        ring_radius = 0.7  # Position of peak intensity
-        ring_width = 0.2  # Width of the ring
-        distribution = np.exp(-((distances - ring_radius) / ring_width) ** 2)
-
-        # Scale to desired intensity range
-        distribution = (distribution - distribution.min()) / (distribution.max() - distribution.min())
-        distribution = self.intensity_edge + distribution * (self.intensity_center - self.intensity_edge)
-
-        return distribution
-
-    def _generate_uniform_distribution(self, shape: Tuple[int, int]) -> NDArray:
-        """Generate uniform fluorophore distribution with soft edges."""
-        y, x = np.mgrid[0:shape[0], 0:shape[1]]
-
-        # Calculate normalized distances from center
-        dx = x - self.XM
-        dy = y - self.YM
-
-        # Apply rotation
-        theta = np.radians(self.Angle)
-        dx_rot = dx * np.cos(theta) + dy * np.sin(theta)
-        dy_rot = -dx * np.sin(theta) + dy * np.cos(theta)
-
-        # Scale to create elliptical mask
-        dx_scaled = dx_rot / (self.Major / 2)
-        dy_scaled = dy_rot / (self.Minor / 2)
-        distances = np.sqrt(dx_scaled ** 2 + dy_scaled ** 2)
-
-        # Create soft mask
-        sigma = 0.1  # Controls edge softness
-        distribution = 1 / (1 + np.exp((distances - 1) / sigma))
-
-        # Scale to desired intensity range
-        distribution = self.intensity_edge + distribution * (self.intensity_center - self.intensity_edge)
-
-        return distribution
-
-    def render(self, space: Space) -> NDArray:
-        """Render the nucleus, given its properties and the space object."""
-        if not self.is_alive:
-            return np.zeros(space.space[:2])
-
-        # Generate base distribution based on type
-        if self.distribution_type == "gaussian":
-            distribution = self._generate_gaussian_distribution(space.space[:2])
-        elif self.distribution_type == "ring":
-            distribution = self._generate_ring_distribution(space.space[:2])
-        else:  # uniform
-            distribution = self._generate_uniform_distribution(space.space[:2])
-
-        # Add noise
-        noise = np.random.normal(0, self.noise_std, distribution.shape)
-        distribution = np.maximum(distribution + noise, 0)
-
-        # Add background
-        distribution += self.background_level
-
-        # Scale by RawIntDen
-        distribution *= (self.RawIntDen / distribution.sum())
-
-        return distribution
-
-    @classmethod
-    def create_from_nucleus(cls,
-                            nucleus: Nucleus,
-                            distribution_type: str = "gaussian",
-                            **kwargs) -> "NucleusFluorophoreDistribution":
-        """Create a fluorophore distribution from a base nucleus."""
-        # Create empty fluorophore density array
-        fluorophore_density = np.array([])
-
-        # Create instance with all nucleus properties
-        nucleus_dict = nucleus.model_dump()
-        instance = cls(
-            **nucleus_dict,
-            fluorophore_density=fluorophore_density,
-            distribution_type=distribution_type,
-            **kwargs
-        )
-
-        return instance
-    
+        )    
 
     
     
