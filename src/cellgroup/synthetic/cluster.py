@@ -1,56 +1,65 @@
-from pydantic import BaseModel, Field, model_validator
-from typing import Optional, List, Tuple
+from typing import Optional
+
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from cellgroup.synthetic import NucleusFluorophoreDistribution, Space
+from cellgroup.synthetic.nucleus import Nucleus
+from cellgroup.synthetic.space import Space
 
 
 class Cluster(BaseModel):
     """Defines a cluster of nuclei with spatial organization and evolution."""
+    
+    model_config = ConfigDict(validate_assignment=True, validate_default=True)
 
-    nuclei: list[NucleusFluorophoreDistribution] = Field(
+    nuclei: list[Nucleus] = Field(
         default_factory=list,
-        description="List of nuclei in the cluster"
+        description="List of active nuclei in the cluster."
     )
+    
+    dead_nuclei: list[Nucleus] = Field(
+        default_factory=list,
+        description="List of dead nuclei in the cluster."
+    ) # might be useful for analysis (e.g., lineage)
 
+    #TODO: Space is common to all clusters, so it should not be a field
+    # of a specific cluster (unless simplifies the code)
     space: Space = Field(
-        description="Space where the cluster exists"
+        description="Space where the cluster exists."
     )
 
     # Geometric properties
-    max_radius: tuple[int, int, int] = Field(
-        description="Maximum radius in each dimension"
+    max_radius: tuple[int, ...] = Field(
+        description="Maximum radius in each dimension."
     )
 
     concentration: float = Field(
+        gt=0.0, # lt=1.0, #TODO: not sure about this
         description="Density of nuclei in the cluster",
-        gt=0.0
     )
 
     # Optional properties for cluster behavior
-    repulsion_strength: float = Field(
+    repulsion_strength: Optional[float] = Field(
         default=50.0,
-        description="Strength of repulsion between nuclei"
+        description="Repulsion strength between nuclei. If None, no repulsion."
     )
 
-    adhesion_strength: float = Field(
+    adhesion_strength: Optional[float] = Field(
         default=10.0,
-        description="Strength of adhesion between nuclei"
+        description="Adhesion strength between nuclei. If None, no adhesion."
     )
 
+    #TODO: naming is not clear
     noise_strength: float = Field(
         default=1.0,
         description="Strength of random motion"
     )
 
-    class Config:
-        arbitrary_types_allowed = True
-
     @model_validator(mode='after')
     def validate_cluster(self) -> 'Cluster':
         """Validate cluster configuration."""
-        if len(self.max_radius) != len(self.space.space):
+        if len(self.max_radius) != len(self.space.size):
             raise ValueError("max_radius dimensions must match space dimensions")
         return self
 
@@ -69,30 +78,22 @@ class Cluster(BaseModel):
         return tuple(np.mean(positions, axis=0))
 
     @property
-    def volume(self) -> float:
-        """Calculate approximate cluster volume."""
+    def size(self) -> float:
+        """Calculate approximate cluster size (area in 2D, volume in 3D)."""
         if not self.nuclei:
             return 0.0
 
-        # Get bounding box
+        # Get bounding box #TODO: this can become a method since it can used in many places
         positions = np.array([[n.XM, n.YM] for n in self.nuclei])
         min_coords = np.min(positions, axis=0)
         max_coords = np.max(positions, axis=0)
 
-        # Calculate dimensions in microns
-        dimensions = [
-            (max_coords[i] - min_coords[i]) * self.space.scale[i]
-            for i in range(2)
-        ]
+        # Calculate dimensions in microns #TODO: keep in pixels
+        dimensions = (max_coords - min_coords) * np.array(self.space.scale) #TODO: ugly
+        
+        return np.prod(dimensions)
 
-        # For 2D, use area * unit depth
-        if len(self.space.space) == 2:
-            return dimensions[0] * dimensions[1]
-
-        # For 3D, use volume
-        return dimensions[0] * dimensions[1] * dimensions[2]
-
-    def _calculate_forces(self) -> List[tuple[float, float]]:
+    def _calculate_forces(self) -> list[tuple[float, ...]]:
         """Calculate forces between nuclei."""
         forces = [(0.0, 0.0) for _ in self.nuclei]
 
@@ -129,29 +130,36 @@ class Cluster(BaseModel):
 
     def update(self):
         """Update the status of nuclei in the cluster."""
-        if not self.nuclei:
+        if self.count == 0:
             return
 
         # Update individual nuclei
         alive_nuclei = []
         for nucleus in self.nuclei:
-            if nucleus.update():  # Returns False if nucleus dies
-                alive_nuclei.append(nucleus)
+            nucleus.update()
+            
+            #TODO: implement check for new position
+            
+            # Remove dead nuclei
+            if not nucleus.is_alive:
+                alive_nuclei.append(nucleus)                
+            else:
+                self.dead_nuclei.append(nucleus)
 
-                # Check for division
-                if nucleus.Area >= nucleus.min_division_size:
-                    daughter = nucleus.divide()
-                    if daughter != nucleus:
-                        alive_nuclei.append(daughter)
+            # Check for division #TODO: for coherence, this should happen in nucleus.update()
+            if nucleus.Area >= nucleus.min_division_size:
+                daughter = nucleus.divide()
+                if daughter != nucleus:
+                    alive_nuclei.append(daughter)
 
         self.nuclei = alive_nuclei
 
         # Calculate and apply forces
         forces = self._calculate_forces()
 
-        # Update positions based on forces
+        # Update positions based on forces #TODO: adapt to 3D
         for nucleus, (fx, fy) in zip(self.nuclei, forces):
-            # Add random noise
+            # Add random noise #TODO: isn't this already in nucleus.update()?
             fx += np.random.normal(0, self.noise_strength)
             fy += np.random.normal(0, self.noise_strength)
 
@@ -160,13 +168,16 @@ class Cluster(BaseModel):
             new_y = nucleus.YM + fy
 
             # Keep within bounds
-            new_x = np.clip(new_x, 0, self.space.space[0])
-            new_y = np.clip(new_y, 0, self.space.space[1])
+            new_x = np.clip(new_x, 0, self.space.size[0])
+            new_y = np.clip(new_y, 0, self.space.size[1])
 
             nucleus.XM = new_x
             nucleus.YM = new_y
             nucleus.centroid = (int(new_x), int(new_y), 0)
+            
+            #TODO: can a nucleus be kicked out of the cluster due to repulsion?
 
+    #TODO: this should be in the FP class, here we just simulate the geometry
     def render(self) -> NDArray:
         """Render the cluster."""
         if not self.nuclei:
@@ -182,12 +193,14 @@ class Cluster(BaseModel):
         return image
 
     @classmethod
-    def create_random_cluster(cls,
-                              space: Space,
-                              n_nuclei: int,
-                              center: tuple[float, float],
-                              radius: float,
-                              **kwargs) -> 'Cluster':
+    def create_random_cluster(
+        cls,
+        space: Space,
+        n_nuclei: int,
+        center: tuple[float, float],
+        radius: float,
+        **kwargs
+    ) -> 'Cluster':
         """Create a cluster with randomly positioned nuclei."""
         nuclei = []
         for _ in range(n_nuclei):
@@ -198,7 +211,7 @@ class Cluster(BaseModel):
             y = center[1] + r * np.sin(angle)
 
             # Create nucleus at position
-            nucleus = NucleusFluorophoreDistribution(
+            nucleus = Nucleus(
                 id=len(nuclei),
                 dim="2D",
                 XM=x,
