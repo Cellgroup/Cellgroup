@@ -32,12 +32,13 @@ class NucleusFluorophoreDistribution(BaseModel):
 
     def _generate_gaussian_distribution(self, shape: tuple[int, int]) -> NDArray:
         """Generate Gaussian fluorophore distribution."""
+        #TODO: this step would need a brief explanation
         y, x = np.mgrid[0:shape[0], 0:shape[1]]
         pos = np.dstack((x, y))
 
         # --- Create covariance matrix for elliptical distribution
-        major_sigma = self.Major / 4  # Convert radius to standard deviation
-        minor_sigma = self.Minor / 4
+        major_sigma = self.nucleus.Major / 4  # Convert radius to standard deviation
+        minor_sigma = self.nucleus.Minor / 4
 
         # Rotation matrix
         theta = np.radians(self.Angle)
@@ -51,7 +52,7 @@ class NucleusFluorophoreDistribution(BaseModel):
         cov = rot_matrix @ cov @ rot_matrix.T
 
         # --- Generate distribution
-        rv = np.random.normal([self.XM, self.YM], cov)
+        rv = np.random.normal([self.nucleus.XM, self.nucleus.YM], cov)
         distribution = rv.pdf(pos)
 
         # Scale to desired intensity range
@@ -65,8 +66,9 @@ class NucleusFluorophoreDistribution(BaseModel):
         y, x = np.mgrid[0:shape[0], 0:shape[1]]
 
         # Calculate distances from center
-        dx = x - self.XM
-        dy = y - self.YM
+        # TODO: adapt to 3D
+        dx = x - self.nucleus.XM
+        dy = y - self.nucleus.YM
 
         # Apply rotation
         theta = np.radians(self.Angle)
@@ -74,8 +76,8 @@ class NucleusFluorophoreDistribution(BaseModel):
         dy_rot = -dx * np.sin(theta) + dy * np.cos(theta)
 
         # Scale to create elliptical distance
-        dx_scaled = dx_rot / (self.Major / 2)
-        dy_scaled = dy_rot / (self.Minor / 2)
+        dx_scaled = dx_rot / (self.nucleus.Major / 2)
+        dy_scaled = dy_rot / (self.nucleus.Minor / 2)
         distances = np.sqrt(dx_scaled ** 2 + dy_scaled ** 2)
 
         # Create ring pattern
@@ -94,17 +96,17 @@ class NucleusFluorophoreDistribution(BaseModel):
         y, x = np.mgrid[0:shape[0], 0:shape[1]]
 
         # Calculate normalized distances from center
-        dx = x - self.XM
-        dy = y - self.YM
+        dx = x - self.nucleus.XM
+        dy = y - self.nucleus.YM
 
         # Apply rotation
-        theta = np.radians(self.Angle)
+        theta = np.radians(self.nucleus.Angle)
         dx_rot = dx * np.cos(theta) + dy * np.sin(theta)
         dy_rot = -dx * np.sin(theta) + dy * np.cos(theta)
 
         # Scale to create elliptical mask
-        dx_scaled = dx_rot / (self.Major / 2)
-        dy_scaled = dy_rot / (self.Minor / 2)
+        dx_scaled = dx_rot / (self.nucleus.Major / 2)
+        dy_scaled = dy_rot / (self.nucleus.Minor / 2)
         distances = np.sqrt(dx_scaled ** 2 + dy_scaled ** 2)
 
         # Create soft mask
@@ -118,7 +120,7 @@ class NucleusFluorophoreDistribution(BaseModel):
 
     def render(self, space: Space) -> NDArray:
         """Render the nucleus FP distribution, given its properties and the space object."""
-        if not self.is_alive:
+        if not self.nucleus.is_alive:
             return np.zeros(space.space[:2])
 
         # Generate base distribution based on type
@@ -136,8 +138,8 @@ class NucleusFluorophoreDistribution(BaseModel):
         # Add background
         distribution += self.background_level
 
-        # Scale by RawIntDen
-        distribution *= (self.RawIntDen / distribution.sum())
+        # Scale by RawIntDen #TODO: not clear
+        distribution *= (self.nucleus.RawIntDen / distribution.sum())
 
         return distribution
 
