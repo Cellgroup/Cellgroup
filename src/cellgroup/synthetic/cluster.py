@@ -12,6 +12,8 @@ class Cluster(BaseModel):
     """Defines a cluster of nuclei with spatial organization and evolution."""
     
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
+    
+    idx: int = Field(description="Unique cluster index.")
 
     nuclei: list[Nucleus] = Field(
         default_factory=list,
@@ -55,6 +57,8 @@ class Cluster(BaseModel):
         default=1.0,
         description="Strength of random motion"
     )
+    
+    #TODO: implement nice __repr__ method to get a summary of the cluster
 
     @model_validator(mode='after')
     def validate_cluster(self) -> 'Cluster':

@@ -24,7 +24,7 @@ class Nucleus(BaseModel):
     )
     
     # Essential identification and tracking
-    id: int = Field(description="Unique nucleus ID")
+    idx: int = Field(description="Unique nucleus index") 
     Labels: int = Field(description="Cluster label")
     Time: int = Field(description="Temporal information")
     eta: int = Field(default=0, description="Age of nucleus in timesteps")
@@ -57,6 +57,8 @@ class Nucleus(BaseModel):
     lineage: list[int] = Field(default_factory=list, description="List of parent nuclei IDs")
     death_prob: float = Field(0.0, ge=0.0, le=1.0)
     division_prob: float = Field(0.0, ge=0.0, le=1.0)
+    
+    #TODO: implement nice __repr__ method to get a summary of the sample
 
     # --- Calculated geometric properties ---
     @property
@@ -211,11 +213,11 @@ class Nucleus(BaseModel):
 
         # Create daughter nucleus with same properties
         daughter = self.model_copy()
-        daughter.id = self.id + 1000 
+        daughter.id = self.idx + 1000 
         # TODO: not clear -> do we want a hash function that generates unique IDs maybe?
         # Could be useful to retrieve nuclei then.
         daughter.eta = 0
-        daughter.lineage = self.lineage + [self.id]
+        daughter.lineage = self.lineage + [self.idx]
 
         # Calculate division axis (perpendicular to major axis)
         division_angle = np.radians(self.Angle + 90)
