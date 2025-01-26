@@ -1,19 +1,22 @@
 from __future__ import annotations
 
-from typing import Optional, Literal
+from typing import Optional, Literal, Sequence
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from numpy.typing import NDArray
 from scipy.stats import multivariate_normal
 
 from cellgroup.synthetic.nucleus import Nucleus
 from cellgroup.synthetic.space import Space 
 
-#TODO: we should consider supporting 3D simulation from the start
 
+# TODO: make separate classes for 2D and 3D nuclei (?)
 class Nucleus(BaseModel):
-    """Defines a nucleus instance with minimal core properties and growth dynamics."""
+    """Defines a nucleus instance with minimal core properties and growth dynamics.
+    
+    TODO: add overall description of the class and its purpose.
+    """
 
     # TODO: refactor names -> capital letters not common in Python
     
@@ -24,97 +27,162 @@ class Nucleus(BaseModel):
     )
     
     # Essential identification and tracking
-    idx: int = Field(description="Unique nucleus index") 
-    Labels: int = Field(description="Cluster label")
-    Time: int = Field(description="Temporal information")
-    eta: int = Field(default=0, description="Age of nucleus in timesteps")
+    idx: int # TODO: check how to handle unique IDs generation
+    "Unique nucleus index." 
+    label: int # TODO: can a nucleus not belong to any cluster?
+    "Cluster label."
+    time: int
+    "Global timestep of simulation."
+    eta: int = 0
+    "Age of nucleus in timesteps."
+    is_alive: Optional[bool] = True
+    "Viability status."
 
     # Core positional and geometric properties
-    XM: float = Field(description="X coordinate of mass center")
-    YM: float = Field(description="Y coordinate of mass center")
-    Major: float = Field(description="Length of major axis")
-    Minor: float = Field(description="Length of minor axis")
-    Angle: float = Field(description="Orientation angle in degrees")
-
-    # TODO: descriptions can be more detailed and put in """ """ under Field
+    # TODO: introduce unit of measurement to have more realistic reference values!
+    centroid: tuple[float, ...]
+    "Coordinate of nucleus centroid as [(Z), Y, X]."
+    semi_axes: tuple[float, ...]
+    "Semi-axes of the nucleus."
+    angle: float
+    "Orientation angle (in degrees)."
     
     # Core intensity properties
-    RawIntDen: float = Field(description="Raw integrated density") # TODO: not clear
-
-    # TODO: in some simulations we might want to disable some properties.
-    # Therefore we need to put `Optional` for all properties and set default to None.
+    raw_int_density: Optional[float] = None # TODO: not sure is needed
+    """Raw integrated density, i.e., fluorescence intensity of the nucleus.
+    Disabled if `None`."""
     
     # Growth and death properties
     # TODO: it would be nice to set ranges for these values to avoid unrealistic values
-    growth_rate: float = Field(default=0.1, description="Base growth rate")
-    max_size: float = Field(default=1000.0, description="Maximum area")
-    min_division_size: float = Field(default=500.0, description="Minimum size for division")
-    min_viable_size: float = Field(default=50.0, description="Minimum viable size")
-    max_age: int = Field(default=200, description="Maximum age in timesteps")
-    is_alive: bool = Field(default=True, description="Viability status")
-
-    # Optional evolutionary properties
-    lineage: list[int] = Field(default_factory=list, description="List of parent nuclei IDs")
-    death_prob: float = Field(0.0, ge=0.0, le=1.0)
-    division_prob: float = Field(0.0, ge=0.0, le=1.0)
+    growth_rate: Optional[float] = 0.1
+    "Base growth rate. Disabled if `None`."
+    max_size: float = 1000.0, 
+    "Maximum area. Disabled if `None`."
+    min_division_size: Optional[float] = 500.0
+    "Minimum size for division. Disabled if `None`."
+    min_viable_size: Optional[float] = 50.0
+    "Minimum viable size. Disabled if `None`."
+    max_age: Optional[int] = 200
+    "Maximum age in timesteps. Disabled if `None`."
+    lineage: Optional[list[int]] = Field(default_factory=list)
+    "List of parent nuclei IDs. Disabled if `None`."
+    death_prob: Optional[float] = 0.0
+    "Probability of death. Disabled if `None`."
+    division_prob: Optional[float] = 0.0
+    "Probability of division. Disabled if `None`."
+    
+    @field_validator("centroid")
+    def _convert_to_array(cls, value):
+        return np.asarray(value)
+    
+    @field_validator("semi_axes")
+    def _convert_to_array(cls, value):
+        return np.asarray(value)
+    
+    @model_validator(mode="after")
+    def _validate_dims(self):
+        if len(self.centroid) not in (2, 3):
+            raise ValueError("Nucleus centroid must have 2 or 3 dimensions.")
+        if len(self.semi_axes) != len(self.centroid):
+            raise ValueError(
+                f"Found {len(self.centroid)}-dimensional centroid with "
+                f"{len(self.semi_axes)} semi-axes."
+            )
+        return self
+    
+    # TODO: add more validators (if needed)
     
     #TODO: implement nice __repr__ method to get a summary of the sample
 
     # --- Calculated geometric properties ---
     @property
-    def Area(self) -> float:
+    def is_3D(self) -> bool:
+        """Check if nucleus is 3D."""
+        return len(self.centroid) == 3
+    
+    @property
+    def area(self) -> float:
         """Calculate area using ellipse formula."""
-        return np.pi * (self.Major / 2) * (self.Minor / 2)
+        if self.is_3D:
+            raise ValueError("Area calculation not supported for 3D nuclei.")
+        else:
+            return np.pi * np.prod(self.semi_axes)
+    
+    @property
+    def volume(self) -> float:
+        """Calculate volume using ellipsoid formula."""
+        if not self.is_3D:
+            raise ValueError("Volume calculation not supported for 2D nuclei.")
+        else:
+            return (4/3) * np.pi * np.prod(self.semi_axes)
+        
+    @property
+    def _size(self) -> float:
+        """Private property to refer to area or volume depending on 2D/3D."""
+        return np.prod(self.semi_axes)
 
     @property
-    def AspectRatio(self) -> float:
+    def aspect_ratio(self) -> float:
         """Calculate aspect ratio."""
-        return self.Major / self.Minor
+        return np.min(self.semi_axes) / np.max(self.semi_axes)
 
     @property
-    def Roundness(self) -> float:
-        """Calculate roundness (4*Area/(π*Major^2))."""
-        return (4 * self.Area) / (np.pi * self.Major ** 2)
+    def roundness(self) -> float:
+        """Calculate roundness as the ratio between the ellipse (resp. ellipsoid) area
+        (resp. volume) and the one of a circle (resp. sphere) with the longer semiaxis
+        as its radius."""
+        if self.is_3D:
+            return self.volume / (4/3 * np.pi * np.max(self.semi_axes) ** 3)
+        else:
+            return self.area / (4 * np.pi * np.max(self.semi_axes) ** 2)
 
     @property
     def perimeter(self) -> float:
         """Calculate perimeter using Ramanujan approximation."""
-        a = self.Major
-        b = self.Minor
-        h = ((a - b) / (a + b)) ** 2
-        return np.pi * (a + b) * (1 + (3 * h) / (10 + np.sqrt(4 - 3 * h)))
-    
+        if self.is_3D:
+            raise ValueError("Perimeter calculation not supported for 3D nuclei.")
+        else:
+            a = self.semi_axes[0]
+            b = self.semi_axes[1]
+            h = ((a - b) / (a + b)) ** 2
+            return np.pi * (a + b) * (1 + (3 * h) / (10 + np.sqrt(4 - 3 * h)))
+        
     @property
-    def Circ(self) -> float:
-        """Calculate circularity (4π*Area/perimeter^2)."""
-        return (4 * np.pi * self.Area) / (self.perimeter ** 2)
+    def surface_area(self) -> float:
+        """Calculate surface area of 3D nucleus using approximate formula.
+        
+        See: https://en.wikipedia.org/wiki/Ellipsoid#Surface_area
+        """
+        if not self.is_3D:
+            raise ValueError("Surface area calculation not supported for 2D nuclei.")
+        else:
+            return 4 * np.pi * (
+                np.sum((
+                    (self.semi_axes[0] * self.semi_axes[1]) ** 1.6,
+                    (self.semi_axes[0] * self.semi_axes[2]) ** 1.6,
+                    (self.semi_axes[1] * self.semi_axes[2]) ** 1.6
+                )) / 3
+            ) ** (1 / 1.6)
 
-    @property
-    def Solidity(self) -> float:
+    @property # TODO: remove ?
+    def solidity(self) -> float:
         """Approximate solidity (area/convex hull area)."""
         raise NotImplementedError
 
     # --- Calculated intensity properties ---
     @property
-    def IntDen(self) -> float: # TODO: not clear
-        """Calculate integrated density."""
-        return self.RawIntDen
-
-    @property
-    def Mean(self) -> float: # TODO: naming is misleading
+    def mean_int_density(self) -> Optional[float]:
         """Calculate mean intensity."""
-        return self.RawIntDen / self.Area
-
-    @property
-    def centroid(self) -> tuple[float, float]:
-        """Return centroid coordinates."""
-        return (self.XM, self.YM)
-
+        if self.raw_int_density is None:
+            return None
+        else:
+            return self.raw_int_density / self._size            
+        
     def _calculate_growth_factor(self) -> float:
-        """Calculate growth factor based on current size and conditions."""
+        """Calculate isotropic growth factor based on current size and conditions."""
         # Logistic growth factor
-        size_factor = 1 - (self.Area / self.max_size)
-
+        size_factor = 1 - (self._size / self.max_size)
+        
         # Age-dependent modulation
         age_factor = np.exp(-self.eta / 100)  # Decreases with age
 
@@ -127,103 +195,62 @@ class Nucleus(BaseModel):
 
         return 1 + growth_increment + noise
 
-    def _check_death(self) -> bool:
+    def check_death(self) -> bool:
         """Check if the nucleus should die based on various conditions."""
         if not self.is_alive:
             return False
 
         # Death conditions
         if (
-            self.Area < self.min_viable_size or  # Too small
+            self._size < self.min_viable_size or  # Too small
             self.eta > self.max_age or  # Too old
-            np.random.random() < self.death_prob
-        ):  # Random death
+            np.random.random() < self.death_prob # Random death
+        ):
             return True
 
         return False
 
-    def die(self):
-        """Handle death of nucleus."""
+    def die(self) -> None:
+        """Simulate death of nucleus by progressively reducing its size."""
         self.is_alive = False
-        # Rapid size decrease #TODO: not clear
+        # simulate death with a rapid size decrease
         shrink_factor = 0.5
-        self.Major *= shrink_factor
-        self.Minor *= shrink_factor
-        self.RawIntDen *= shrink_factor
+        self.semi_axes = self.semi_axes * shrink_factor
+        self.raw_int_density *= shrink_factor
+        
+    def check_division(self) -> bool:
+        """Check if the nucleus should divide based on various conditions."""
+        if (
+            self._size > self.min_division_size and  # Big enough
+            np.random.random() < self.division_prob  # Random division
+        ):
+            return True
 
-    def update(self) -> bool: #TODO: is there a reason why we want to return a boolean?
-        """Update nucleus properties for one timestep. Returns False if nucleus dies."""
-        if not self.is_alive:
-            return False
+        return False
 
-        # Increment age
-        self.eta += 1
-
-        # Check for death #TODO: this is ok, but can be made more readable
-        if self._check_death():
-            self.die()
-            return False
-
-        # Calculate growth factor
-        growth_factor = self._calculate_growth_factor()
-
-        # Update size while maintaining aspect ratio
-        #TODO: also implement non-isotropic growth
-        self.Major *= np.sqrt(growth_factor)
-        self.Minor *= np.sqrt(growth_factor)
-
-        # Update intensity proportionally to area
-        self.RawIntDen *= growth_factor
-
-        # Random movement (Brownian motion)
-        diffusion_coefficient = 1.0  # Can be adjusted #TODO: move into parameters
-        dx = np.random.normal(0, np.sqrt(2 * diffusion_coefficient))
-        dy = np.random.normal(0, np.sqrt(2 * diffusion_coefficient))
-        self.XM += dx
-        self.YM += dy
-        # TODO: checks to implement:
-        # - make sure nucleus does not leave the image Space
-        # - make sure nucleus does not overlap with other nuclei
-        # - make sure nucleus does not exit the cluster (or maybe it could?)
-
-        # Random rotation
-        rotation_rate = 0.1  # Degrees per timestep #TODO: move into parameters
-        dangle = np.random.normal(0, rotation_rate)
-        self.Angle = (self.Angle + dangle) % 360
-
-        # Update division probability based on size and age
-        size_factor = max(0, (self.Area - self.min_division_size) / self.min_division_size)
-        age_factor = np.exp(-self.eta / 50)  # Decreases with age
-        self.division_prob = 0.1 * size_factor * age_factor  # Base rate * factors
-
-        # Update death probability based on age and size
-        stress_factor = max(0, (self.Area - self.max_size) / self.max_size)
-        age_factor = self.eta / self.max_age
-        self.death_prob = min(0.8, age_factor + stress_factor)
-
-        return True
-
-    def divide(self) -> "Nucleus":
-        # TODO: shouldn't we return a pair of `Nucleus` and make mother die?
-        # This is also a biological question. Whatever makes more sense from a 
-        # biological perspective is the better choice.
-        """Divide nucleus into two daughter nuclei if conditions are met."""
-        if self.Area < self.min_division_size or np.random.random() > self.division_prob:
-            return self
-
+    def divide(self) -> tuple["Nucleus", "Nucleus"]:
+        """Divide nucleus if conditions are met and return the 2 daughter nuclei."""
         # Create daughter nucleus with same properties
-        daughter = self.model_copy()
-        daughter.id = self.idx + 1000 
-        # TODO: not clear -> do we want a hash function that generates unique IDs maybe?
-        # Could be useful to retrieve nuclei then.
-        daughter.eta = 0
-        daughter.lineage = self.lineage + [self.idx]
+        d1, d2 = self.model_copy(), self.model_copy()
+        d1.idx, d2.idx = self.idx + 1000, self.idx + 1001
+        d1.eta = d2.eta = 0
+        d1.lineage, d2.lineage = self.lineage + [self.idx], self.lineage + [self.idx]
 
-        # Calculate division axis (perpendicular to major axis)
-        division_angle = np.radians(self.Angle + 90)
-        displacement = self.Minor / 2
+        # Scale down sizes (maintain total size)
+        scale_factor = 1 / np.sqrt(2)
+        d1.semi_axes = d2.semi_axes = self.semi_axes * scale_factor
 
-        # Calculate new positionsc #TODO: not clear
+        # Divide intensity roughly equally (with some noise)
+        intensity_ratio = np.random.normal(0.5, 0.05)
+        d1.raw_int_density *= intensity_ratio
+        d2.raw_int_density *= (1 - intensity_ratio)
+        
+        # Calculate new positions # TODO: make clarity
+        # Hp: division happens along the major axis
+        division_angle = np.radians(self.angle + 90)
+        displacement = np.min(self.semi_axes)
+
+        # Calculate new positions
         dx = displacement * np.cos(division_angle)
         dy = displacement * np.sin(division_angle)
 
@@ -233,19 +260,63 @@ class Nucleus(BaseModel):
         daughter.XM = self.XM + 2 * dx
         daughter.YM = self.YM + 2 * dy
 
-        # Scale down sizes (maintain total area)
-        scale_factor = 1 / np.sqrt(2)
-        self.Major *= scale_factor
-        self.Minor *= scale_factor
-        daughter.Major *= scale_factor
-        daughter.Minor *= scale_factor
+        # TODO: Remove mother cell from simulation
+        
+        return d1, d2
+    
+    def update(self) -> bool:
+        """Update nucleus properties for one timestep. Returns False if nucleus dies."""
+        if not self.is_alive:
+            return False
 
-        # Divide intensity roughly equally (with some noise)
-        intensity_ratio = np.random.normal(0.5, 0.05)
-        self.RawIntDen *= intensity_ratio
-        daughter.RawIntDen *= (1 - intensity_ratio)
+        # Increment age
+        self.eta += 1
 
-        return daughter
+        # --- Simulate death ---
+        if self.check_death():
+            self.die()
+            return False
+        
+        # --- Simulate division ---
+        if self.check_division():
+            self.divide() # check what to return here ...
+            return True
+
+        # --- Simulate growth ---
+        growth_factor = self._calculate_growth_factor()
+        self.semi_axes = self.semi_axes * np.sqrt(growth_factor)
+
+        # Update intensity proportionally to area
+        self.raw_int_density *= growth_factor
+
+        # --- Simulate random movement (Brownian motion) ---
+        diffusion_coefficient = 1.0  # Can be adjusted #TODO: move into parameters
+        displacements = np.random.normal(
+            0, np.sqrt(2 * diffusion_coefficient), len(self.centroid)
+        )
+        self.centroid = self.centroid + displacements
+        
+        # TODO: checks to implement:
+        # - make sure nucleus does not leave the image Space
+        # - make sure nucleus does not overlap with other nuclei
+        # - make sure nucleus does not exit the cluster (or maybe it could?)
+
+        # --- Simulate random rotation --- 
+        rotation_rate = 0.1  # Degrees per timestep #TODO: move into parameters
+        dangle = np.random.normal(0, rotation_rate)
+        self.angle = (self.angle + dangle) % 360
+
+        # --- Update division probability based on size and age ---
+        size_factor = max(0, (self._size - self.min_division_size) / self.min_division_size)
+        age_factor = np.exp(-self.eta / 50)  # Decreases with age
+        self.division_prob = 0.1 * size_factor * age_factor  # Base rate * factors
+
+        # --- Update death probability based on age and size ---
+        stress_factor = max(0, (self._size - self.max_size) / self.max_size)
+        age_factor = self.eta / self.max_age
+        self.death_prob = min(0.8, age_factor + stress_factor)
+
+        return True
 
     @classmethod
     def create_from_measurements(cls,
