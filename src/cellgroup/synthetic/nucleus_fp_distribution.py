@@ -75,8 +75,8 @@ class NucleusFluorophoreDistribution(BaseModel):
         dy_rot = -dx * np.sin(theta) + dy * np.cos(theta)
 
         # Scale to create elliptical distance
-        dx_scaled = dx_rot / (self.nucleus.Major / 2)
-        dy_scaled = dy_rot / (self.nucleus.Minor / 2)
+        dx_scaled = dx_rot / (self.nucleus.Major)
+        dy_scaled = dy_rot / (self.nucleus.Minor)
         distances = np.sqrt(dx_scaled ** 2 + dy_scaled ** 2)
 
         # Create ring pattern

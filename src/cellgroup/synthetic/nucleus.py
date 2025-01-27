@@ -6,7 +6,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from numpy.typing import NDArray
 
-from cellgroup.synthetic.nucleus import Nucleus
+from cellgroup.synthetic.space import Space
 
 
 # TODO: make separate classes for 2D and 3D nuclei (?)
@@ -177,7 +177,6 @@ class Nucleus(BaseModel):
         """Approximate solidity (area/convex hull area)."""
         raise NotImplementedError
 
-    # --- Calculated intensity properties ---
     @property
     def mean_int_density(self) -> Optional[float]:
         """Calculate mean intensity."""
@@ -185,6 +184,65 @@ class Nucleus(BaseModel):
             return None
         else:
             return self.raw_int_density / self._size            
+    
+    # --- Methods for rendering purpose ---
+    def _get_rotation_matrix(self) -> NDArray:
+        """Calculate rotation matrix for nucleus orientation."""
+        theta = np.radians(self.angle)
+        if self.is_3D:
+            raise NotImplementedError("3D rotation matrix calculation not implemented.")
+        else:
+            return np.array([
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)]
+            ])
+            
+    def _compute_ellipsoidal_distances(self, space_shape: tuple[int, ...]) -> NDArray:
+        """Calculate distances from nucleus centroid in ellipsoidal space.
+        
+        Parameters
+        ----------
+        space_shape : tuple[int, ...]
+            Shape of the space in which the nucleus lives. Coords given as [(Z), Y, X].
+        
+        Returns
+        -------
+        distances : NDArray
+            Distances from nucleus centroid in ellipsoidal space for each pixel in the
+            coordinate grid.
+        """
+        # Generate grid of coordinates
+        coords = np.mgrid[tuple(slice(0, s) for s in space_shape)]
+        coords = np.moveaxis(coords, 0, -1)
+        
+        # Normalize coordinates
+        coords = (coords - self.centroid) / self.semi_axes
+        
+        # Rotate coordinates
+        if self.is_3D:
+            raise NotImplementedError("3D rotation not implemented.")
+        else:
+            coords = np.dot(self._get_rotation_matrix(), coords)
+        
+        # Calculate distances
+        distances = np.sqrt(np.sum(coords ** 2, axis=-1))
+        
+        return distances
+    
+    def render(self, space: Space) -> NDArray:
+        """Render the nucleus as a binary mask in the given space.
+        
+        Returns
+        -------
+        mask : NDArray
+            Binary mask of the nucleus in the space.
+        """
+        # Calculate distances from centroid
+        distances = self._compute_ellipsoidal_distances(space.size)
+        
+        # Create binary mask
+        mask = distances <= 1.0        
+        return mask.astype(float)
         
     def _calculate_growth_factor(self) -> float:
         """Calculate isotropic growth factor based on current size and conditions."""
@@ -234,7 +292,7 @@ class Nucleus(BaseModel):
         ):
             return True
 
-        return False
+        return False    
 
     def divide(self) -> tuple["Nucleus", "Nucleus"]:
         """Divide nucleus if conditions are met and return the 2 daughter nuclei."""
