@@ -5,10 +5,8 @@ from typing import Optional, Literal, Sequence
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from numpy.typing import NDArray
-from scipy.stats import multivariate_normal
 
 from cellgroup.synthetic.nucleus import Nucleus
-from cellgroup.synthetic.space import Space 
 
 
 # TODO: make separate classes for 2D and 3D nuclei (?)
@@ -17,8 +15,6 @@ class Nucleus(BaseModel):
     
     TODO: add overall description of the class and its purpose.
     """
-
-    # TODO: refactor names -> capital letters not common in Python
     
     model_config = ConfigDict(
         arbitrary_types_allowed=True, # TODO: why is this needed?
@@ -45,7 +41,7 @@ class Nucleus(BaseModel):
     semi_axes: tuple[float, ...]
     "Semi-axes of the nucleus."
     angle: float
-    "Orientation angle (in degrees)."
+    "Orientation angle (in degrees)." # TODO: we need a 2nd angle in 3D case (?)
     
     # Core intensity properties
     raw_int_density: Optional[float] = None # TODO: not sure is needed
@@ -248,17 +244,15 @@ class Nucleus(BaseModel):
         # Calculate new positions # TODO: make clarity
         # Hp: division happens along the major axis
         division_angle = np.radians(self.angle + 90)
-        displacement = np.min(self.semi_axes)
+        displacements = np.min(self.semi_axes)
 
         # Calculate new positions
-        dx = displacement * np.cos(division_angle)
-        dy = displacement * np.sin(division_angle)
+        # dx = displacement * np.cos(division_angle)
+        # dy = displacement * np.sin(division_angle)
 
         # Update positions
-        self.XM -= dx
-        self.YM -= dy
-        daughter.XM = self.XM + 2 * dx
-        daughter.YM = self.YM + 2 * dy
+        d1.semi_axes = d1.semi_axes - displacements
+        d2.semi_axes = self.semi_axes + 2 * displacements
 
         # TODO: Remove mother cell from simulation
         
@@ -318,21 +312,24 @@ class Nucleus(BaseModel):
 
         return True
 
-    @classmethod
-    def create_from_measurements(cls,
-                                 measurements: dict) -> "Nucleus":
-        """Create a nucleus instance from minimal required measurements."""
-        return cls(
-            id=measurements.get('id', np.random.randint(1, 100000)),
-            Labels=measurements['Labels'],
-            Time=measurements['Time'],
-            XM=measurements['X'],
-            YM=measurements['Y'],
-            Major=measurements['Major'],
-            Minor=measurements['Minor'],
-            Angle=measurements['Angle'],
-            RawIntDen=measurements['RawIntDen']
-        )    
+    # TODO: we can come with a better way to init this
+    # @classmethod
+    # def create_from_measurements(
+    #     cls,
+    #     measurements: dict
+    # ) -> "Nucleus":
+    #     """Create a nucleus instance from minimal required measurements."""
+    #     return cls(
+    #         idx=measurements.get('id', np.random.randint(1, 100000)),
+    #         label=measurements['Labels'],
+    #         timestep=measurements['Time'],
+    #         XM=measurements['X'],
+    #         YM=measurements['Y'],
+    #         Major=measurements['Major'],
+    #         Minor=measurements['Minor'],
+    #         Angle=measurements['Angle'],
+    #         RawIntDen=measurements['RawIntDen']
+    #     )    
 
     
     
