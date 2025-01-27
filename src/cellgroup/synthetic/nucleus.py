@@ -97,6 +97,18 @@ class Nucleus(BaseModel):
         return len(self.centroid) == 3
     
     @property
+    def ndims(self) -> int:
+        """Return number of dimensions."""
+        return len(self.centroid)
+    
+    @property
+    def bounding_box(self) -> tuple[tuple[float, float], ...]:
+        """Calculate bounding box of nucleus."""
+        return tuple(
+            (c - a, c + a) for c, a in zip(self.centroid, self.semi_axes)
+        )
+    
+    @property
     def area(self) -> float:
         """Calculate area using ellipse formula."""
         if self.is_3D:

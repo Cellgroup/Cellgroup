@@ -11,7 +11,9 @@ from cellgroup.synthetic.space import Space
 class NucleusFluorophoreDistribution(BaseModel):
     """Defines a fluorophore density distribution over the nucleus."""
 
-    model_config = ConfigDict(validate_assignment=True, validate_default=True)
+    model_config = ConfigDict(
+        validate_assignment=True, validate_default=True, arbitrary_types_allowed = True
+    )
     
     nucleus: Nucleus
     """Nucleus object on which FP distribution is rendered."""
@@ -26,9 +28,6 @@ class NucleusFluorophoreDistribution(BaseModel):
     intensity_edge: float = 0.3  # Relative intensity at edge
     noise_std: float = 0.1  # Standard deviation of noise
     background_level: float = 0.05  # Background intensity level
-
-    class Config:
-        arbitrary_types_allowed = True
 
     def _generate_gaussian_distribution(self, shape: tuple[int, int]) -> NDArray:
         """Generate Gaussian fluorophore distribution."""
