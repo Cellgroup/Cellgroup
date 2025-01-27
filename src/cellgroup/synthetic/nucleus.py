@@ -8,6 +8,8 @@ from numpy.typing import NDArray
 
 from cellgroup.synthetic.space import Space
 
+# NOTE: we do all the geometric simulation with [X, Y, Z] order for simplicity.
+# Then we switch to [Z, Y, X] order for rendering purposes.
 
 # TODO: make separate classes for 2D and 3D nuclei (?)
 class Nucleus(BaseModel):
@@ -37,11 +39,18 @@ class Nucleus(BaseModel):
     # Core positional and geometric properties
     # TODO: introduce unit of measurement to have more realistic reference values!
     centroid: tuple[float, ...]
-    "Coordinate of nucleus centroid as [(Z), Y, X]."
+    "Coordinate of nucleus centroid as [X, y, [Z]]."
     semi_axes: tuple[float, ...]
     "Semi-axes of the nucleus."
-    angle: float
-    "Orientation angle (in degrees)." # TODO: we need a 2nd angle in 3D case (?)
+    angle_x: float = 0.0
+    """Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
+    This is the only angle needed for the 2D case."""
+    angle_y: Optional[float] = None
+    """Orientation angle relative to Y-axis (in degrees). Also referred to as `phi`.
+    Needed for the 3D case."""
+    angle_z: Optional[float] = None
+    """Orientation angle relative to Z-axis (in degrees). Also referred to as `psi`.
+    Needed for the 3D case."""
     
     # Core intensity properties
     raw_int_density: Optional[float] = None # TODO: not sure is needed
@@ -86,11 +95,23 @@ class Nucleus(BaseModel):
             )
         return self
     
+    @model_validator(mode="after")
+    def _validate_angles(self):
+        if self.is_3D:
+            if self.angle_y is None:
+                self.angle_y = 0.0
+            if self.angle_z is None:
+                self.angle_z = 0.0
+        else:
+            if self.angle_y is not None or self.angle_z is not None:
+                raise ValueError("`angle_y` and `angle_z` are only used for 3D case.")
+        return self
+    
     # TODO: add more validators (if needed)
     
     #TODO: implement nice __repr__ method to get a summary of the sample
 
-    # --- Calculated geometric properties ---
+    # --- Useful properties ---
     @property
     def is_3D(self) -> bool:
         """Check if nucleus is 3D."""
@@ -102,12 +123,22 @@ class Nucleus(BaseModel):
         return len(self.centroid)
     
     @property
+    def angles(self) -> tuple[float, ...]:
+        """Return orientation angles as a tuple in [X, Y, (Z)] order."""
+        if self.is_3D:
+            return self.angle_x, self.angle_y, self.angle_z
+        else:
+            return self.angle_x,
+    
+    @property
     def bounding_box(self) -> tuple[tuple[float, float], ...]:
         """Calculate bounding box of nucleus."""
         return tuple(
             (c - a, c + a) for c, a in zip(self.centroid, self.semi_axes)
         )
     
+    
+    # --- Derived geometric properties ---    
     @property
     def area(self) -> float:
         """Calculate area using ellipse formula."""
@@ -184,65 +215,7 @@ class Nucleus(BaseModel):
             return None
         else:
             return self.raw_int_density / self._size            
-    
-    # --- Methods for rendering purpose ---
-    def _get_rotation_matrix(self) -> NDArray:
-        """Calculate rotation matrix for nucleus orientation."""
-        theta = np.radians(self.angle)
-        if self.is_3D:
-            raise NotImplementedError("3D rotation matrix calculation not implemented.")
-        else:
-            return np.array([
-                [np.cos(theta), -np.sin(theta)],
-                [np.sin(theta), np.cos(theta)]
-            ])
-            
-    def _compute_ellipsoidal_distances(self, space_shape: tuple[int, ...]) -> NDArray:
-        """Calculate distances from nucleus centroid in ellipsoidal space.
-        
-        Parameters
-        ----------
-        space_shape : tuple[int, ...]
-            Shape of the space in which the nucleus lives. Coords given as [(Z), Y, X].
-        
-        Returns
-        -------
-        distances : NDArray
-            Distances from nucleus centroid in ellipsoidal space for each pixel in the
-            coordinate grid.
-        """
-        # Generate grid of coordinates
-        coords = np.mgrid[tuple(slice(0, s) for s in space_shape)]
-        coords = np.moveaxis(coords, 0, -1)
-        
-        # Normalize coordinates
-        coords = (coords - self.centroid) / self.semi_axes
-        
-        # Rotate coordinates
-        if self.is_3D:
-            raise NotImplementedError("3D rotation not implemented.")
-        else:
-            coords = np.dot(self._get_rotation_matrix(), coords)
-        
-        # Calculate distances
-        distances = np.sqrt(np.sum(coords ** 2, axis=-1))
-        
-        return distances
-    
-    def render(self, space: Space) -> NDArray:
-        """Render the nucleus as a binary mask in the given space.
-        
-        Returns
-        -------
-        mask : NDArray
-            Binary mask of the nucleus in the space.
-        """
-        # Calculate distances from centroid
-        distances = self._compute_ellipsoidal_distances(space.size)
-        
-        # Create binary mask
-        mask = distances <= 1.0        
-        return mask.astype(float)
+
         
     def _calculate_growth_factor(self) -> float:
         """Calculate isotropic growth factor based on current size and conditions."""
@@ -381,6 +354,81 @@ class Nucleus(BaseModel):
         self.death_prob = min(0.8, age_factor + stress_factor)
 
         return True
+    
+        # --- Methods for rendering purpose ---
+    def _get_rotation_matrix(self) -> NDArray:
+        """Calculate rotation matrix for nucleus orientation."""
+        theta = np.radians(self.angle)
+        if not self.is_3D:
+            return np.array([
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)]
+            ])
+        else:
+            phi = np.radians(self.angle_y)
+            psi = np.radians(self.angle_z)
+            Rx = np.array([
+                [1, 0, 0],
+                [0, np.cos(theta), -np.sin(theta)],
+                [0, np.sin(theta), np.cos(theta)]
+            ])
+            Ry = np.array([
+                [np.cos(phi), 0, np.sin(phi)],
+                [0, 1, 0],
+                [-np.sin(phi), 0, np.cos(phi)]
+            ])
+            Rz = np.array([
+                [np.cos(psi), -np.sin(psi), 0],
+                [np.sin(psi), np.cos(psi), 0],
+                [0, 0, 1]
+            ])
+            return np.dot(Rz, np.dot(Ry, Rx))
+            
+    def _compute_ellipsoidal_distances(self, space_shape: tuple[int, ...]) -> NDArray:
+        """Calculate distances from nucleus centroid in ellipsoidal space.
+        
+        Parameters
+        ----------
+        space_shape : tuple[int, ...]
+            Shape of the space in which the nucleus lives. Coords given as [(Z), Y, X].
+        
+        Returns
+        -------
+        distances : NDArray
+            Distances from nucleus centroid in ellipsoidal space for each pixel in the
+            coordinate grid.
+        """
+        # Generate grid of coordinates
+        coords = np.mgrid[tuple(slice(0, s) for s in space_shape)]
+        
+        # Normalize coordinates
+        coords = (coords - self.centroid) / self.semi_axes
+        
+        # Rotate coordinates
+        if self.is_3D:
+            raise NotImplementedError("3D rotation not implemented.")
+        else:
+            coords = np.dot(coords, self._get_rotation_matrix().T)
+        
+        # Calculate distances
+        distances = np.sqrt(np.sum(coords ** 2, axis=-1))
+        
+        return distances
+    
+    def render(self, space: Space) -> NDArray:
+        """Render the nucleus as a binary mask in the given space.
+        
+        Returns
+        -------
+        mask : NDArray
+            Binary mask of the nucleus in the space.
+        """
+        # Calculate distances from centroid
+        distances = self._compute_ellipsoidal_distances(space.size)
+        
+        # Create binary mask
+        mask = distances <= 1.0        
+        return mask.astype(float)
 
     # TODO: we can come with a better way to init this
     # @classmethod
