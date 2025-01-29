@@ -16,6 +16,47 @@ class Nucleus(BaseModel):
     """Defines a nucleus instance with minimal core properties and growth dynamics.
     
     TODO: add overall description of the class and its purpose.
+    
+    Attributes
+    ----------
+    idx : int
+        Unique nucleus index.
+    cluster_idx : int
+        Cluster index.
+    time : int
+        Global timestep of simulation.
+    eta : int, default=0
+        Age of nucleus in timesteps.
+    is_alive : Optional[bool], default=True
+        Viability status.
+    centroid : tuple[float, ...]
+        Coordinate of nucleus centroid as [X, Y, [Z]].
+    semi_axes : tuple[float, ...]
+        Semi-axes of the nucleus, in [X, Y, [Z]] ordering.
+    angle_x : float, default=0.0
+        Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
+    angle_y : Optional[float], default=None
+        Orientation angle relative to Y-axis (in degrees). Also referred to as `phi`.
+    angle_z : Optional[float], default=None
+        Orientation angle relative to Z-axis (in degrees). Also referred to as `psi`.
+    raw_int_density : Optional[float], default=None
+        Raw integrated density, i.e., fluorescence intensity of the nucleus.
+    growth_rate : Optional[float], default=0.1
+        Base growth rate.
+    max_size : float, default=1000.0
+        Maximum area.
+    min_division_size : Optional[float], default=500.0
+        Minimum size for division.
+    min_viable_size : Optional[float], default=50.0
+        Minimum viable size.
+    max_age : Optional[int], default=200
+        Maximum age in timesteps.
+    lineage : Optional[list[int]], default_factory=list
+        List of parent nuclei IDs.
+    death_prob : Optional[float], default=0.0
+        Probability of death.
+    division_prob : Optional[float], default=0.0
+        Probability of division.
     """
     
     model_config = ConfigDict(
@@ -27,8 +68,8 @@ class Nucleus(BaseModel):
     # Essential identification and tracking
     idx: int # TODO: check how to handle unique IDs generation
     "Unique nucleus index." 
-    label: int # TODO: can a nucleus not belong to any cluster?
-    "Cluster label."
+    cluster_idx: int # TODO: can a nucleus not belong to any cluster?
+    "Cluster index."
     time: int
     "Global timestep of simulation."
     eta: int = 0
@@ -39,9 +80,9 @@ class Nucleus(BaseModel):
     # Core positional and geometric properties
     # TODO: introduce unit of measurement to have more realistic reference values!
     centroid: tuple[float, ...]
-    "Coordinate of nucleus centroid as [X, y, [Z]]."
+    "Coordinate of nucleus centroid as [X, Y, [Z]]."
     semi_axes: tuple[float, ...]
-    "Semi-axes of the nucleus."
+    "Semi-axes of the nucleus, in [X, Y, [Z]] ordering."
     angle_x: float = 0.0
     """Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
     This is the only angle needed for the 2D case."""
@@ -77,11 +118,11 @@ class Nucleus(BaseModel):
     "Probability of division. Disabled if `None`."
     
     @field_validator("centroid")
-    def _convert_to_array(cls, value):
+    def _convert__centroid_to_array(cls, value):
         return np.asarray(value)
     
     @field_validator("semi_axes")
-    def _convert_to_array(cls, value):
+    def _convert_semiaxes_to_array(cls, value):
         return np.asarray(value)
     
     @model_validator(mode="after")
@@ -385,7 +426,7 @@ class Nucleus(BaseModel):
             return np.dot(Rz, np.dot(Ry, Rx))
             
     def _compute_ellipsoidal_distances(self, space_shape: tuple[int, ...]) -> NDArray:
-        """Calculate distances from nucleus centroid in ellipsoidal space.
+        """Calculate distances from nucleus centroid in the ellipsoidal space.
         
         Parameters
         ----------
@@ -405,10 +446,7 @@ class Nucleus(BaseModel):
         coords = (coords - self.centroid) / self.semi_axes
         
         # Rotate coordinates
-        if self.is_3D:
-            raise NotImplementedError("3D rotation not implemented.")
-        else:
-            coords = np.dot(coords, self._get_rotation_matrix().T)
+        coords = np.dot(coords, self._get_rotation_matrix().T)
         
         # Calculate distances
         distances = np.sqrt(np.sum(coords ** 2, axis=-1))
