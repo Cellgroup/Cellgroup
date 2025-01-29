@@ -8,7 +8,7 @@ class Space(BaseModel):
     size: tuple[int, ...]
     "Size of space in pixels (Z, Y, X). Can be 2D or 3D."
 
-    scale: tuple[int, ...]
+    scale: tuple[float, ...]
     "Voxel size in each dimension in μm (Z, Y, X). Can be 2D or 3D."
     
     #TODO: private numpy attrs for speed-up (?) -> _size, _scale
@@ -23,7 +23,7 @@ class Space(BaseModel):
         return value
     
     @field_validator('scale')
-    def validate_scale(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+    def validate_scale(cls, value: tuple[float, ...]) -> tuple[float, ...]:
         """Validate scale field."""
         if len(value) not in [2, 3]:
             raise ValueError("Scale must be 2D or 3D.")
