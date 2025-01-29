@@ -1,18 +1,31 @@
-from pydantic import BaseModel, Field, model_validator
-from typing import Optional, List, Dict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Any, Optional
 import numpy as np
 from numpy.typing import NDArray
 
-from cellgroup.synthetic import Cluster, Space
+from cellgroup.synthetic.cluster import Cluster
+from cellgroup.synthetic.space import Space
 
 
 class Sample(BaseModel):
     """Defines a sample with multiple clusters that evolve over time."""
+    
+    model_config = ConfigDict(validate_assignment=True, validate_default=True)
 
     clusters: list[Cluster] = Field(
         default_factory=list,
         description="List of clusters in the sample"
     )
+    
+    dead_clusters: list[Cluster] = Field(
+        default_factory=list,
+        description="List of dead (i.e., all nuclei died) clusters in the sample"
+    ) # might be useful for analysis (e.g., lineage)
+    
+    merged_clusters: list[Cluster] = Field(
+        default_factory=list,
+        description="List of merged clusters in the sample"
+    ) # might be useful for analysis (e.g., lineage) --> #TODO: add lineage to clusters
 
     space: Space = Field(
         description="Space where the sample exists"
@@ -33,9 +46,8 @@ class Sample(BaseModel):
         default=20.0,
         description="Distance threshold for merging clusters"
     )
-
-    class Config:
-        arbitrary_types_allowed = True
+    
+    #TODO: implement nice __repr__ method to get a summary of the sample
 
     @property
     def count(self) -> int:
@@ -48,10 +60,16 @@ class Sample(BaseModel):
         return sum(cluster.count for cluster in self.clusters)
 
     @property
-    def centroid(self) -> tuple[float, float, float]:
+    def nuclei_count(self) -> dict[int, int]:
+        """Number of nuclei in each cluster."""
+        return {c.idx: c.count for c in self.clusters}
+
+    #TODO: necessary to have this?
+    @property
+    def centroid(self) -> tuple[float, ...]:
         """Calculate sample centroid."""
         if not self.clusters:
-            return (0.0, 0.0, 0.0)
+            return (0.0, 0.0, 0.0) #TODO: adapt to 2D/3D
 
         weighted_positions = [
             (c.centroid, c.count) for c in self.clusters
@@ -68,7 +86,7 @@ class Sample(BaseModel):
 
         return tuple(ws / total_nuclei for ws in weighted_sum)
 
-    def _check_cluster_merge(self) -> List[tuple[int, int]]:
+    def _check_cluster_merge(self) -> list[tuple[int, int]]:
         """Find clusters that should be merged."""
         merge_pairs = []
 
@@ -81,11 +99,13 @@ class Sample(BaseModel):
 
                 if distance < self.cluster_merge_threshold:
                     merge_pairs.append((i, j))
-
+        
         return merge_pairs
 
-    def _merge_clusters(self, cluster_pairs: List[tuple[int, int]]):
+    def _merge_clusters(self):
         """Merge specified cluster pairs."""
+        cluster_pairs = self._check_cluster_merge()
+        
         if not cluster_pairs:
             return
 
@@ -93,33 +113,52 @@ class Sample(BaseModel):
         cluster_pairs = sorted(cluster_pairs, reverse=True)
 
         for i, j in cluster_pairs:
-            # Merge nuclei lists
-            self.clusters[i].nuclei.extend(self.clusters[j].nuclei)
-
-            # Update cluster properties
-            self.clusters[i].max_radius = tuple(
-                max(r1, r2) for r1, r2 in
-                zip(self.clusters[i].max_radius, self.clusters[j].max_radius)
+            #TODO: here I would create a new cluster instance and add the old ones to
+            # a list of merged clusters, to keep track of evolution history
+            c1 = self.clusters[i]
+            c2 = self.clusters[j]
+            
+            # Create new cluster
+            new_cluster = Cluster(
+                nuclei=c1.nuclei + c2.nuclei,
+                dead_nuclei=c1.dead_nuclei + c2.dead_nuclei,
+                #TODO: add other properties
             )
 
-            # Remove merged cluster
+            # Update cluster properties
+            new_cluster.max_radius = tuple(
+                max(r1, r2) for r1, r2 in zip(c1.max_radius, c2.max_radius)
+            )
+
+            # Update cluster lists
+            self.merged_clusters.append(c1)
+            self.merged_clusters.append(c2)
+            self.clusters.pop(i)
             self.clusters.pop(j)
+            self.clusters.append(new_cluster)
+            
 
     def update(self):
         """Update the status of clusters in the sample."""
         self.timestep += 1
 
         # Update individual clusters
+        active_clusters = []
         for cluster in self.clusters:
             cluster.update()
-
-        # Remove empty clusters
-        self.clusters = [c for c in self.clusters if c.count > 0]
+            
+            # Check for empty clusters
+            if cluster.count == 0:
+                self.dead_clusters.append(cluster)
+            else:
+                active_clusters.append(cluster)
+        
+        self.clusters = active_clusters
 
         # Check for cluster merging
-        merge_pairs = self._check_cluster_merge()
-        self._merge_clusters(merge_pairs)
+        self._merge_clusters()
 
+    #TODO: move to a separate class
     def render(self) -> NDArray:
         """Render the sample."""
         if not self.clusters:
@@ -134,7 +173,7 @@ class Sample(BaseModel):
 
         return image
 
-    def get_cluster_metrics(self) -> Dict:
+    def get_cluster_metrics(self) -> dict[str, Any]:
         """Calculate various metrics for the sample."""
         if not self.clusters:
             return {}
@@ -144,7 +183,7 @@ class Sample(BaseModel):
             'n_clusters': self.count,
             'total_nuclei': self.total_nuclei,
             'mean_cluster_size': self.total_nuclei / self.count,
-            'total_volume': sum(c.volume for c in self.clusters),
+            'total_volume': sum(c.size for c in self.clusters),
             'cluster_distances': [],
             'cluster_sizes': [c.count for c in self.clusters]
         }
@@ -159,12 +198,14 @@ class Sample(BaseModel):
         return metrics
 
     @classmethod
-    def create_random_sample(cls,
-                             space: Space,
-                             n_clusters: int,
-                             nuclei_per_cluster: int,
-                             min_separation: float = 100.0,
-                             **kwargs) -> 'Sample':
+    def create_random_sample(
+        cls,
+        space: Space,
+        n_clusters: int,
+        nuclei_per_cluster: int,
+        min_separation: float = 100.0,
+        **kwargs
+    ) -> 'Sample':
         """Create a sample with randomly positioned clusters."""
         clusters = []
         attempts = 0
