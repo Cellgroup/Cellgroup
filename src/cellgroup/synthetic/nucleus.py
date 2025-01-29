@@ -21,8 +21,8 @@ class Nucleus(BaseModel):
     ----------
     idx : int
         Unique nucleus index.
-    cluster_idx : int
-        Cluster index.
+    cluster_idx : Optional[int]
+        Cluster index. Can be `None` if nucleus does not belong to any cluster.
     time : int
         Global timestep of simulation.
     eta : int, default=0
@@ -68,7 +68,7 @@ class Nucleus(BaseModel):
     # Essential identification and tracking
     idx: int # TODO: check how to handle unique IDs generation
     "Unique nucleus index." 
-    cluster_idx: int # TODO: can a nucleus not belong to any cluster?
+    cluster_idx: Optional[int] = None # TODO: can a nucleus not belong to any cluster?
     "Cluster index."
     time: int
     "Global timestep of simulation."
@@ -102,7 +102,7 @@ class Nucleus(BaseModel):
     # TODO: it would be nice to set ranges for these values to avoid unrealistic values
     growth_rate: Optional[float] = 0.1
     "Base growth rate. Disabled if `None`."
-    max_size: float = 1000.0, 
+    max_size: float = 1000.0
     "Maximum area. Disabled if `None`."
     min_division_size: Optional[float] = 500.0
     "Minimum size for division. Disabled if `None`."
@@ -396,14 +396,15 @@ class Nucleus(BaseModel):
 
         return True
     
-        # --- Methods for rendering purpose ---
+    # --- Methods for rendering purpose ---
+    # TODO: make it a property?
     def _get_rotation_matrix(self) -> NDArray:
         """Calculate rotation matrix for nucleus orientation."""
-        theta = np.radians(self.angle)
+        theta = np.radians(self.angle_x)
         if not self.is_3D:
             return np.array([
-                [np.cos(theta), -np.sin(theta)],
-                [np.sin(theta), np.cos(theta)]
+                [np.cos(theta), np.sin(theta)],
+                [-np.sin(theta), np.cos(theta)]
             ])
         else:
             phi = np.radians(self.angle_y)
@@ -440,18 +441,22 @@ class Nucleus(BaseModel):
             coordinate grid.
         """
         # Generate grid of coordinates
-        coords = np.mgrid[tuple(slice(0, s) for s in space_shape)]
+        coords = np.mgrid[tuple(slice(0, s) for s in space_shape)] # shape: (ndims, (Z), Y, X)
+        coords = coords.reshape(len(space_shape), -1)
         
-        # Normalize coordinates
-        coords = (coords - self.centroid) / self.semi_axes
+        # Center coordinates
+        coords = coords - self.centroid[:, None]
         
         # Rotate coordinates
-        coords = np.dot(coords, self._get_rotation_matrix().T)
+        coords = np.dot(self._get_rotation_matrix(), coords)
+        
+        # Normalize coordinates
+        coords = coords / self.semi_axes[:, None]
         
         # Calculate distances
-        distances = np.sqrt(np.sum(coords ** 2, axis=-1))
+        distances = np.sqrt(np.sum(coords ** 2, axis=0))
         
-        return distances
+        return distances.reshape(space_shape)
     
     def render(self, space: Space) -> NDArray:
         """Render the nucleus as a binary mask in the given space.
@@ -466,7 +471,12 @@ class Nucleus(BaseModel):
         
         # Create binary mask
         mask = distances <= 1.0        
-        return mask.astype(float)
+        return mask
+
+
+
+
+
 
     # TODO: we can come with a better way to init this
     # @classmethod
