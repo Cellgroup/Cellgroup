@@ -5,18 +5,16 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class Space(BaseModel):
     """Defines a space where synthetic data live."""
 
-    size: tuple[int, ...] = Field(
-        description="Size of space in pixels (Z, Y, X). Can be 2D or 3D."
-    )
+    size: tuple[int, ...]
+    "Size of space in pixels (Z, Y, X). Can be 2D or 3D."
 
-    scale: tuple[int, ...] = Field(
-        description="Voxel size in each dimension in μm (Z, Y, X). Can be 2D or 3D."
-    )
+    scale: tuple[int, ...]
+    "Voxel size in each dimension in μm (Z, Y, X). Can be 2D or 3D."
     
     #TODO: private numpy attrs for speed-up (?) -> _size, _scale
     
     @field_validator('size')
-    def validate_size(self, value: tuple[int, ...]) -> tuple[int, ...]:
+    def validate_size(cls, value: tuple[int, ...]) -> tuple[int, ...]:
         """Validate size field."""
         if len(value) not in [2, 3]:
             raise ValueError("Size must be 2D or 3D.")
@@ -25,7 +23,7 @@ class Space(BaseModel):
         return value
     
     @field_validator('scale')
-    def validate_scale(self, value: tuple[int, ...]) -> tuple[int, ...]:
+    def validate_scale(cls, value: tuple[int, ...]) -> tuple[int, ...]:
         """Validate scale field."""
         if len(value) not in [2, 3]:
             raise ValueError("Scale must be 2D or 3D.")
@@ -33,11 +31,12 @@ class Space(BaseModel):
             raise ValueError("Scale entries must be positive.")
         return value
     
-    @model_validator
+    @model_validator(mode="after")
     def validate_dimensions(self):
         """Validate that size and scale have the same number of dimensions."""
         if len(self.size) != len(self.scale):
             raise ValueError("Size and scale dimensions must match.")
+        return self
     
     @property
     def ndim(self) -> int:
