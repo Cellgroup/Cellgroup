@@ -309,36 +309,56 @@ class Nucleus(BaseModel):
         return False    
 
     def divide(self) -> tuple["Nucleus", "Nucleus"]:
-        """Divide nucleus if conditions are met and return the 2 daughter nuclei."""
-        # Create daughter nucleus with same properties
+        """Divide nucleus if conditions are met and return the two daughter nuclei.
+        
+        **Assumptions** 
+        1. Time resolution of desired timelapses is way larger than the typical
+        division time of a nucleus. Hence, we don't need to model the position of cells
+        after division with high precision.
+        2. In our pipeline, division is the first thing happening in the update call.
+        Specifically, we assume that division happens immediately at the beginning of
+        the timestep, hence daughter cells have time to grow and move during the same
+        timestep.
+
+        **How it works**
+        - Division happens at the mid point of the longest axis.
+        - Volume is divided equally plus some noise.
+        - Intensity density is divided roughly equally plus some noise.
+        - Centroids of daughter cells are places at the vertices of the longest axis.
+        - Daughter cells have the same orientation of the mother.
+        Last two points are not realistic, but it is fine as these nuclei will move
+        and rotate during the same timestep.
+        """
+        # --- Create daughter nucleus with same properties
         d1, d2 = self.model_copy(), self.model_copy()
         d1.idx, d2.idx = self.idx + 1000, self.idx + 1001
         d1.eta = d2.eta = 0
         d1.lineage, d2.lineage = self.lineage + [self.idx], self.lineage + [self.idx]
 
-        # Scale down sizes (maintain total size)
-        scale_factor = 1 / np.sqrt(2)
-        d1.semi_axes = d2.semi_axes = self.semi_axes * scale_factor
+        # --- Rescale sizes (maintaining ~ total size)
+        scale_factor = 1 / 2**(1/3)
+        scale_factor = np.random.normal(scale_factor, 0.05)
+        d1.semi_axes = self.semi_axes * scale_factor
+        d2.semi_axes = self.semi_axes * scale_factor
 
-        # Divide intensity roughly equally (with some noise)
+        # --- Divide intensity roughly equally (with some noise)
         intensity_ratio = np.random.normal(0.5, 0.05)
         d1.raw_int_density *= intensity_ratio
         d2.raw_int_density *= (1 - intensity_ratio)
+
+        # --- Calculate new centroids position
+        longest_axis_idx = np.argmax(self.semi_axes)
+        longest_axis = self.semi_axes[longest_axis_idx]
+        # get vertices of the longest axis
+        d1.centroid = np.zeros_like(self.centroid)
+        d1.centroid[longest_axis_idx] = longest_axis
+        d2.centroid = -d1.centroid
+        # rotate vertices and translate to mother centroid
+        d1.centroid = np.dot(self._get_rotation_matrix(), d1.centroid) + self.centroid
+        d2.centroid = np.dot(self._get_rotation_matrix(), d2.centroid) + self.centroid
         
-        # Calculate new positions # TODO: make clarity
-        # Hp: division happens along the major axis
-        division_angle = np.radians(self.angle + 90)
-        displacements = np.min(self.semi_axes)
-
-        # Calculate new positions
-        # dx = displacement * np.cos(division_angle)
-        # dy = displacement * np.sin(division_angle)
-
-        # Update positions
-        d1.semi_axes = d1.semi_axes - displacements
-        d2.semi_axes = self.semi_axes + 2 * displacements
-
-        # TODO: Remove mother cell from simulation
+        # --- Remove mother cell from simulation
+        self.is_alive = False
         
         return d1, d2
     
