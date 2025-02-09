@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from cellgroup.synthetic.nucleus import Nucleus
+from cellgroup.synthetic.nucleus import Nucleus, Status
 from cellgroup.synthetic.space import Space
 
 
@@ -21,8 +21,9 @@ class Cluster(BaseModel):
     
     dead_nuclei: list[Nucleus] = Field(default_factory=list)
     "List of dead nuclei in the cluster."
-    # might be useful for analysis (e.g., lineage)
-    # it is more efficient to keep them separate than to avoid calling update() on them
+    
+    divided_nuclei: list[Nucleus] = Field(default_factory=list)
+    "List of nuclei in the cluster that have undergone division."
 
     # Geometric properties
     max_radius: tuple[int, ...]
@@ -150,33 +151,10 @@ class Cluster(BaseModel):
                 forces[j] = (forces[j][0] + force * dx, forces[j][1] + force * dy)
 
         return forces
-
-    def update(self):
-        """Update the status of nuclei in the cluster."""
-        if self.count == 0:
-            return
-
-        # Update individual nuclei
-        alive_nuclei = []
-        for nucleus in self.nuclei:
-            nucleus.update()
-            
-            #TODO: implement check for new position
-            
-            # Remove dead nuclei
-            if not nucleus.is_alive:
-                alive_nuclei.append(nucleus)                
-            else:
-                self.dead_nuclei.append(nucleus)
-
-            # Check for division #TODO: for coherence, this should happen in nucleus.update()
-            if nucleus.Area >= nucleus.min_division_size:
-                daughter = nucleus.divide()
-                if daughter != nucleus:
-                    alive_nuclei.append(daughter)
-
-        self.nuclei = alive_nuclei
-
+    
+    def apply_forces(self) -> None:
+        """Apply forces to nuclei in the cluster."""
+        raise NotImplementedError("Force application not implemented yet!")
         # Calculate and apply forces
         forces = self._calculate_forces()
 
@@ -199,6 +177,36 @@ class Cluster(BaseModel):
             nucleus.centroid = (int(new_x), int(new_y), 0)
             
             #TODO: can a nucleus be kicked out of the cluster due to repulsion?
+
+    def update(self) -> None:
+        """Update the status of nuclei in the cluster."""
+        if self.count == 0:
+            return
+
+        # --- Update individual nuclei
+        alive_nuclei = []
+        for nucleus in self.nuclei:
+            curr_status = nucleus.update()
+            
+            #TODO: implement check for new position (or at sample level)
+            
+            # --- Remove dead & divided nuclei
+            if curr_status == Status.ALIVE:
+                alive_nuclei.append(nucleus)                
+            elif curr_status == Status.DIVIDED:
+                # If nucleus has divided, compute the daugters
+                d1, d2 = nucleus.divide()
+                alive_nuclei.append(d1)
+                alive_nuclei.append(d2)
+                self.divided_nuclei.append(nucleus)
+            elif curr_status == Status.DEAD:
+                self.dead_nuclei.append(nucleus)
+
+        self.nuclei = alive_nuclei
+
+        # --- Apply inter-cluster forces
+        self.apply_forces()
+    
 
     def render(self, space: Space) -> NDArray:
         """Render the cluster."""
