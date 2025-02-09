@@ -363,6 +363,40 @@ class Nucleus(BaseModel):
         
         return d1, d2
     
+    def move(self, space_shape: tuple[int, ...]) -> None:
+        """Simulate random movement as Brownian motion."""
+        # TODO: checks to implement:
+        # - make sure nucleus does not exit the cluster (or maybe it could?)
+        
+        # simulate displacement
+        diffusion_coefficient = 1.0  #TODO: move into parameters
+        displacements = np.random.normal(
+            0, np.sqrt(2 * diffusion_coefficient), len(self.centroid)
+        )
+        # constraint displacements to stay in the image space
+        margin = 10  #TODO: move into parameters
+        self.centroid = np.minimum(displacements + self.centroid, space_shape - margin)
+
+    def rotate(self) -> None:
+        """Simulate random rotation."""
+        rotation_rate = 0.1  # Degrees per timestep #TODO: move into parameters
+        dangle = np.random.normal(0, rotation_rate)
+        self.angle = (self.angle + dangle) % 360
+        
+    def update_properties(self) -> None:
+        """Update nucleus properties based on size, age, and other factors."""
+        # --- Update division probability based on size and age ---
+        size_factor = max(
+            0, (self._size - self.min_division_size) / self.min_division_size
+        )
+        age_factor = np.exp(-self.eta / 50)  # Decreases with age
+        self.division_prob = 0.1 * size_factor * age_factor  # Base rate * factors
+
+        # --- Update death probability based on age and size ---
+        stress_factor = max(0, (self._size - self.max_size) / self.max_size)
+        age_factor = self.eta / self.max_age
+        self.death_prob = min(0.8, age_factor + stress_factor)
+
     def update(self) -> bool:
         """Update nucleus properties for one timestep. Returns False if nucleus dies."""
         if not self.is_alive:
@@ -378,7 +412,6 @@ class Nucleus(BaseModel):
         
         # --- Simulate division ---
         if self.check_division():
-            self.divide() # check what to return here ...
             return True
 
         # --- Simulate growth ---
@@ -389,31 +422,13 @@ class Nucleus(BaseModel):
         self.raw_int_density *= growth_factor
 
         # --- Simulate random movement (Brownian motion) ---
-        diffusion_coefficient = 1.0  # Can be adjusted #TODO: move into parameters
-        displacements = np.random.normal(
-            0, np.sqrt(2 * diffusion_coefficient), len(self.centroid)
-        )
-        self.centroid = self.centroid + displacements
-        
-        # TODO: checks to implement:
-        # - make sure nucleus does not leave the image Space
-        # - make sure nucleus does not overlap with other nuclei
-        # - make sure nucleus does not exit the cluster (or maybe it could?)
+        self.move()
 
-        # --- Simulate random rotation --- 
-        rotation_rate = 0.1  # Degrees per timestep #TODO: move into parameters
-        dangle = np.random.normal(0, rotation_rate)
-        self.angle = (self.angle + dangle) % 360
+        # --- Simulate random rotation ---
+        self.rotate()
 
-        # --- Update division probability based on size and age ---
-        size_factor = max(0, (self._size - self.min_division_size) / self.min_division_size)
-        age_factor = np.exp(-self.eta / 50)  # Decreases with age
-        self.division_prob = 0.1 * size_factor * age_factor  # Base rate * factors
-
-        # --- Update death probability based on age and size ---
-        stress_factor = max(0, (self._size - self.max_size) / self.max_size)
-        age_factor = self.eta / self.max_age
-        self.death_prob = min(0.8, age_factor + stress_factor)
+        # --- Update nucleus properties ---
+        self.update_properties()
 
         return True
     
