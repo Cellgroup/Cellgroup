@@ -342,9 +342,10 @@ class Nucleus(BaseModel):
         d2.semi_axes = self.semi_axes * scale_factor
 
         # --- Divide intensity roughly equally (with some noise)
-        intensity_ratio = np.random.normal(0.5, 0.05)
-        d1.raw_int_density *= intensity_ratio
-        d2.raw_int_density *= (1 - intensity_ratio)
+        if self.raw_int_density is not None:
+            intensity_ratio = np.random.normal(0.5, 0.05)
+            d1.raw_int_density *= intensity_ratio
+            d2.raw_int_density *= (1 - intensity_ratio)
 
         # --- Calculate new centroids position
         longest_axis_idx = np.argmax(self.semi_axes)
