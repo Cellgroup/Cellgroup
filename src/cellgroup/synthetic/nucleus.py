@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Optional, Literal, Sequence
 
 import numpy as np
@@ -10,6 +11,17 @@ from cellgroup.synthetic.space import Space
 
 # NOTE: we do all the geometric simulation with [X, Y, Z] order for simplicity.
 # Then we switch to [Z, Y, X] order for rendering purposes.
+
+
+class Status(Enum):
+    """Enumeration of nucleus status."""
+    ALIVE = "alive"
+    DEAD = "dead"
+    DIVIDED = "divided"
+    
+    def __str__(self):
+        return self.value
+
 
 # TODO: make separate classes for 2D and 3D nuclei (?)
 class Nucleus(BaseModel):
@@ -27,8 +39,9 @@ class Nucleus(BaseModel):
         Global timestep of simulation.
     eta : int, default=0
         Age of nucleus in timesteps.
-    is_alive : Optional[bool], default=True
-        Viability status.
+    status : Status, default=Status.ALIVE
+        Current status of the nucleus, one of `Status.ALIVE`, `Status.DEAD`, or
+        `Status.DIVIDED`.
     centroid : tuple[float, ...]
         Coordinate of nucleus centroid as [X, Y, [Z]].
     semi_axes : tuple[float, ...]
@@ -74,7 +87,7 @@ class Nucleus(BaseModel):
     "Global timestep of simulation."
     eta: int = 0
     "Age of nucleus in timesteps."
-    is_alive: Optional[bool] = True
+    status: Status = Status.ALIVE
     "Viability status."
 
     # Core positional and geometric properties
@@ -277,7 +290,7 @@ class Nucleus(BaseModel):
 
     def check_death(self) -> bool:
         """Check if the nucleus should die based on various conditions."""
-        if not self.is_alive:
+        if self.status == Status.DEAD:
             return False
 
         # Death conditions
@@ -292,7 +305,8 @@ class Nucleus(BaseModel):
 
     def die(self) -> None:
         """Simulate death of nucleus by progressively reducing its size."""
-        self.is_alive = False
+        self.status = Status.DEAD
+        
         # simulate death with a rapid size decrease
         shrink_factor = 0.5
         self.semi_axes = self.semi_axes * shrink_factor
@@ -359,7 +373,7 @@ class Nucleus(BaseModel):
         d2.centroid = np.dot(self._get_rotation_matrix(), d2.centroid) + self.centroid
         
         # --- Remove mother cell from simulation
-        self.is_alive = False
+        self.status = Status.DIVIDED
         
         return d1, d2
     
@@ -397,10 +411,17 @@ class Nucleus(BaseModel):
         age_factor = self.eta / self.max_age
         self.death_prob = min(0.8, age_factor + stress_factor)
 
-    def update(self) -> bool:
-        """Update nucleus properties for one timestep. Returns False if nucleus dies."""
-        if not self.is_alive:
-            return False
+    def update(self) -> Status:
+        """Update nucleus properties returning its status after the update.
+        
+        Returns
+        -------
+        Status
+            Status of the nucleus after the update, i.e., one of `Status.ALIVE`,
+            `Status.DEAD`, or `Status.DIVIDED`.
+        """
+        if self.status != Status.ALIVE:
+            return self.status
 
         # Increment age
         self.eta += 1
@@ -408,11 +429,12 @@ class Nucleus(BaseModel):
         # --- Simulate death ---
         if self.check_death():
             self.die()
-            return False
+            return self.status
         
         # --- Simulate division ---
         if self.check_division():
-            return True
+            self.status = Status.DIVIDED
+            return self.status
 
         # --- Simulate growth ---
         growth_factor = self._calculate_growth_factor()
@@ -430,7 +452,7 @@ class Nucleus(BaseModel):
         # --- Update nucleus properties ---
         self.update_properties()
 
-        return True
+        return self.status
     
     # --- Methods for rendering purpose ---
     # TODO: make it a property?
