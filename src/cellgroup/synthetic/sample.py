@@ -69,7 +69,7 @@ class Sample(BaseModel):
     def centroid(self) -> tuple[float, ...]:
         """Calculate sample centroid."""
         if not self.clusters:
-            return (0.0, 0.0, 0.0) #TODO: adapt to 2D/3D
+            return (0.0,) * self.clusters.ndims #TODO: adapt to 2D/3D
 
         weighted_positions = [
             (c.centroid, c.count) for c in self.clusters
@@ -138,7 +138,7 @@ class Sample(BaseModel):
             self.clusters.append(new_cluster)
             
 
-    def update(self):
+    def update(self) -> None:
         """Update the status of clusters in the sample."""
         self.timestep += 1
 
@@ -158,7 +158,6 @@ class Sample(BaseModel):
         # Check for cluster merging
         self._merge_clusters()
 
-    #TODO: move to a separate class
     def render(self) -> NDArray:
         """Render the sample."""
         if not self.clusters:
