@@ -30,9 +30,9 @@ class Nucleus(BaseModel):
     is_alive : Optional[bool], default=True
         Viability status.
     centroid : tuple[float, ...]
-        Coordinate of nucleus centroid as [X, Y, [Z]].
+        Coordinate of nucleus centroid as [Z, Y, X].
     semi_axes : tuple[float, ...]
-        Semi-axes of the nucleus, in [X, Y, [Z]] ordering.
+        Semi-axes of the nucleus, in [Z, Y, X] ordering.
     angle_x : float, default=0.0
         Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
     angle_y : Optional[float], default=None
@@ -83,13 +83,13 @@ class Nucleus(BaseModel):
     "Coordinate of nucleus centroid as [X, Y, [Z]]."
     semi_axes: tuple[float, ...]
     "Semi-axes of the nucleus, in [X, Y, [Z]] ordering."
-    angle_x: float = 0.0
+    angle_z: float = 0.0
     """Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
     This is the only angle needed for the 2D case."""
     angle_y: Optional[float] = None
     """Orientation angle relative to Y-axis (in degrees). Also referred to as `phi`.
     Needed for the 3D case."""
-    angle_z: Optional[float] = None
+    angle_x: Optional[float] = None
     """Orientation angle relative to Z-axis (in degrees). Also referred to as `psi`.
     Needed for the 3D case."""
     
@@ -327,16 +327,14 @@ class Nucleus(BaseModel):
         
         # Calculate new positions # TODO: make clarity
         # Hp: division happens along the major axis
-        division_angle = np.radians(self.angle + 90)
-        displacements = np.min(self.semi_axes)
+        division_angle = np.radians(self.angle_z + 90)
+        displacement = np.min(self.semi_axes)
 
-        # Calculate new positions
-        # dx = displacement * np.cos(division_angle)
-        # dy = displacement * np.sin(division_angle)
+        offset = np.array([0, displacement * np.sin(division_angle),
+                           displacement * np.cos(division_angle)])
 
-        # Update positions
-        d1.semi_axes = d1.semi_axes - displacements
-        d2.semi_axes = self.semi_axes + 2 * displacements
+        d1.centroid = tuple(self.centroid - offset)
+        d2.centroid = tuple(self.centroid + offset)
 
         # TODO: Remove mother cell from simulation
         
