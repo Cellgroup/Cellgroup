@@ -39,7 +39,12 @@ class Space(BaseModel):
         return self
     
     @property
-    def ndim(self) -> int:
+    def is_3D(self) -> bool:
+        """Check if space is 3D."""
+        return len(self.size) == 3
+    
+    @property
+    def ndims(self) -> int:
         """Return number of dimensions (2D or 3D)."""
         return len(self.size)
 

@@ -3,6 +3,7 @@ from typing import Optional
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from tqdm import tqdm
 
 from cellgroup.synthetic.nucleus import Nucleus
 from cellgroup.synthetic.space import Space
@@ -16,6 +17,9 @@ class Cluster(BaseModel):
     
     idx: int
     "Unique cluster index."
+    
+    time: int
+    "Current timestep of the simulation."
     
     space: Space
     "Space where the cluster exists."
@@ -49,7 +53,7 @@ class Cluster(BaseModel):
     
     #TODO: implement nice __repr__ method to get a summary of the cluster
     
-    @field_validator("nuclei")
+    @field_validator("nuclei", "dead_nuclei", "divided_nuclei")
     def _validate_nuclei_ndims(cls, v: list[Nucleus]) -> list[Nucleus]:
         """Check if all nuclei have the same dimensionality."""
         if not v:
@@ -212,16 +216,24 @@ class Cluster(BaseModel):
         self.apply_forces()
     
 
-    def render(self) -> NDArray:
+    def render(self, border: bool = False) -> NDArray:
         """Render the cluster."""
         if self.is_empty:
             return np.zeros(self.space.size)
 
         # Render each nucleus
+        # TODO: vectorize rendering (especially for 3D)
         image = np.zeros(self.space.size)
-        for nucleus in self.nuclei:
+        for nucleus in tqdm(
+            self.nuclei, desc=f"Rendering nuclei in cluster {self.idx}"
+        ):
             image += nucleus.render()
+        print("------------------------------")
 
+        # Add border if requested
+        if border:
+            raise NotImplementedError("Border rendering not implemented yet!")
+        
         return image
 
     @classmethod
@@ -281,6 +293,7 @@ class Cluster(BaseModel):
             nuclei=nuclei,
             idx=idx,
             space=space,
+            time=time,
             max_radius=radii,
             concentration=n_nuclei / np.prod(radii),    
             **kwargs

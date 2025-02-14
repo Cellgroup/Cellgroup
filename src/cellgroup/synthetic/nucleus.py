@@ -148,10 +148,10 @@ class Nucleus(BaseModel):
     
     @model_validator(mode="after")
     def _validate_wrt_space(self):
-        if len(self.centroid) != self.space.ndim:
+        if len(self.centroid) != self.space.ndims:
             raise ValueError(
                 f"Centroid and space dimensions must match: "
-                f"{len(self.centroid)} != {self.space.ndim}."
+                f"{len(self.centroid)} != {self.space.ndims}."
             )
         return self
     

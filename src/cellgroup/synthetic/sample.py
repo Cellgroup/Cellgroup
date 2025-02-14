@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 from typing import Any, Optional
 import numpy as np
 from numpy.typing import NDArray
@@ -11,44 +11,56 @@ class Sample(BaseModel):
     """Defines a sample with multiple clusters that evolve over time."""
     
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
-
-    clusters: list[Cluster] = Field(
-        default_factory=list,
-        description="List of clusters in the sample"
-    )
     
-    dead_clusters: list[Cluster] = Field(
-        default_factory=list,
-        description="List of dead (i.e., all nuclei died) clusters in the sample"
-    ) # might be useful for analysis (e.g., lineage)
+    space: Space
+    "Space where the sample exists"
+
+    time: int = 0
+    "Current timestep of the simulation"
+
+    clusters: list[Cluster] = Field(default_factory=list)
+    "List of clusters in the sample"
     
-    merged_clusters: list[Cluster] = Field(
-        default_factory=list,
-        description="List of merged clusters in the sample"
-    ) # might be useful for analysis (e.g., lineage) --> #TODO: add lineage to clusters
-
-    space: Space = Field(
-        description="Space where the sample exists"
-    )
-
-    timestep: int = Field(
-        default=0,
-        description="Current timestep of the simulation"
-    )
+    dead_clusters: list[Cluster] = Field(default_factory=list)
+    "List of dead (i.e., all nuclei died) clusters in the sample"
+    # might be useful for analysis (e.g., lineage)
+    
+    merged_clusters: list[Cluster] = Field(default_factory=list)
+    "List of merged clusters in the sample"
+    # might be useful for analysis (e.g., lineage) --> #TODO: add lineage to clusters
 
     # Optional properties for cluster interactions
-    cluster_interaction_range: float = Field(
-        default=100.0,
-        description="Maximum distance for cluster interactions"
-    )
+    cluster_interaction_range: float = 100.0
+    "Maximum distance for cluster interactions"
 
-    cluster_merge_threshold: float = Field(
-        default=20.0,
-        description="Distance threshold for merging clusters"
-    )
+    cluster_merge_threshold: float = 20.0
+    "Distance threshold for merging clusters"
+    
+    @field_validator("clusters", "dead_clusters", "merged_clusters")
+    def _validate_clusters_ndims(cls, v: list[Cluster]) -> list[Cluster]:
+        """Check if all clusters have the same dimensionality."""
+        if not v:
+            return v
+
+        ndims = v[0].ndims
+        if not all(n.ndims == ndims for n in v[1:]):
+            raise ValueError("All clusters must have the same dimensionality!")
+        return v
+    
+    # TODO: implement more validators w.r.t. Space
     
     #TODO: implement nice __repr__ method to get a summary of the sample
-
+    
+    @property
+    def is_3D(self) -> bool:
+        """Check if sample is 3D."""
+        return self.space.ndim == 3
+    
+    @property
+    def ndims(self) -> int:
+        """Number of dimensions (2D or 3D)."""
+        return self.space.ndims
+    
     @property
     def count(self) -> int:
         """Number of clusters in sample."""
@@ -161,10 +173,10 @@ class Sample(BaseModel):
     def render(self) -> NDArray:
         """Render the sample."""
         if not self.clusters:
-            return np.zeros(self.space.space[:2])
+            return np.zeros(self.space.size)
 
         # Initialize image
-        image = np.zeros(self.space.space[:2])
+        image = np.zeros(self.space.size)
 
         # Render each cluster
         for cluster in self.clusters:
@@ -174,6 +186,7 @@ class Sample(BaseModel):
 
     def get_cluster_metrics(self) -> dict[str, Any]:
         """Calculate various metrics for the sample."""
+        raise NotImplementedError("Method not yet implemented.")
         if not self.clusters:
             return {}
 
@@ -200,48 +213,57 @@ class Sample(BaseModel):
     def create_random_sample(
         cls,
         space: Space,
+        time: int,
         n_clusters: int,
-        nuclei_per_cluster: int,
-        min_separation: float = 100.0,
+        cluster_centers: list[tuple[int, ...]],
+        cluster_radii: list[tuple[int, ...]],
+        nuclei_per_cluster_range: tuple[int, int],
+        nuclei_semi_axes_range: tuple[int, int],
         **kwargs
     ) -> 'Sample':
         """Create a sample with randomly positioned clusters."""
-        clusters = []
-        attempts = 0
-        max_attempts = 100
+        clusters: list[Cluster] = []
 
-        while len(clusters) < n_clusters and attempts < max_attempts:
+        #FIXME: this is annoyingly slow, let's do it manually for now
+        # attempts = 0
+        # max_attempts = 100
+        # while len(clusters) < n_clusters and attempts < max_attempts:
             # Generate random center
-            center = (
-                np.random.uniform(100, space.space[0] - 100),
-                np.random.uniform(100, space.space[1] - 100)
-            )
+            # center = np.random.uniform(100, space.size - 100)
+            #
+            # # Check distance from existing clusters
+            # too_close = False
+            # for cluster in clusters:
+            #     dist = np.linalg.norm(
+            #         np.array(center) - np.array(cluster.centroid)
+            #     )
+            #     if dist < min_separation:
+            #         too_close = True
+            #         break
 
-            # Check distance from existing clusters
-            too_close = False
-            for cluster in clusters:
-                dist = np.linalg.norm(
-                    np.array(center) - np.array(cluster.centroid[:2])
-                )
-                if dist < min_separation:
-                    too_close = True
-                    break
+            # if too_close:
+            #     attempts += 1
+            #     continue
 
-            if too_close:
-                attempts += 1
-                continue
-
+        for i in range(n_clusters):
+            # Sample random properties
+            n_nuclei = np.random.randint(*nuclei_per_cluster_range)
+            
             # Create new cluster
             cluster = Cluster.create_random_cluster(
                 space=space,
-                n_nuclei=nuclei_per_cluster,
-                center=center,
-                radius=min_separation / 2
+                time=time,
+                idx=i,
+                n_nuclei=n_nuclei,
+                center=cluster_centers[i],
+                radii=cluster_radii[i],
+                semi_axes_range=nuclei_semi_axes_range,   
             )
             clusters.append(cluster)
 
         return cls(
             clusters=clusters,
             space=space,
+            time=time,
             **kwargs
         )
