@@ -33,9 +33,9 @@ class Nucleus(BaseModel):
         Current status of the nucleus, one of `Status.ALIVE`, `Status.DEAD`, or
         `Status.DIVIDED`.
     centroid : tuple[float, ...]
-        Coordinate of nucleus centroid as [X, Y, [Z]].
+        Coordinate of nucleus centroid as [Z, Y, X].
     semi_axes : tuple[float, ...]
-        Semi-axes of the nucleus, in [X, Y, [Z]] ordering.
+        Semi-axes of the nucleus, in [Z, Y, X] ordering.
     angle_x : float, default=0.0
         Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
     angle_y : Optional[float], default=None
@@ -88,13 +88,13 @@ class Nucleus(BaseModel):
     "Coordinate of nucleus centroid as [X, Y, [Z]]."
     semi_axes: Annotated[tuple[float, ...], AfterValidator(lambda x: np.asarray(x))]
     "Semi-axes of the nucleus, in [X, Y, [Z]] ordering."
-    angle_x: float = 0.0
+    angle_z: float = 0.0
     """Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
     This is the only angle needed for the 2D case."""
     angle_y: Optional[float] = None
     """Orientation angle relative to Y-axis (in degrees). Also referred to as `phi`.
     Needed for the 3D case."""
-    angle_z: Optional[float] = None
+    angle_x: Optional[float] = None
     """Orientation angle relative to Z-axis (in degrees). Also referred to as `psi`.
     Needed for the 3D case."""
     
