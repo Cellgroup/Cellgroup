@@ -57,10 +57,10 @@ class SimulationController(BaseModel):
     update_coordinator: Optional[UpdateCoordinator] = Field(default=None)
 
     # Tracking and analysis
-    events: List[SimulationEvent] = Field(default_factory=list)
-    snapshots: Dict[int, Dict] = Field(default_factory=dict)
-    statistics: Dict[str, List[float]] = Field(default_factory=dict)
-    performance_metrics: Dict[str, List[float]] = Field(default_factory=dict)
+    events: list[SimulationEvent] = Field(default_factory=list)
+    snapshots: dict[int, dict] = Field(default_factory=dict)
+    statistics: dict[str, list[float]] = Field(default_factory=dict)
+    performance_metrics: dict[str, list[float]] = Field(default_factory=dict)
 
     class Config:
         arbitrary_types_allowed = True

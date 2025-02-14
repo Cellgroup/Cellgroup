@@ -36,11 +36,11 @@ class Nucleus(BaseModel):
         Coordinate of nucleus centroid as [Z, Y, X].
     semi_axes : tuple[float, ...]
         Semi-axes of the nucleus, in [Z, Y, X] ordering.
-    angle_x : float, default=0.0
+    theta : float, default=0.0
         Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
-    angle_y : Optional[float], default=None
+    phi : Optional[float], default=None
         Orientation angle relative to Y-axis (in degrees). Also referred to as `phi`.
-    angle_z : Optional[float], default=None
+    psi : Optional[float], default=None
         Orientation angle relative to Z-axis (in degrees). Also referred to as `psi`.
     raw_int_density : Optional[float], default=None
         Raw integrated density, i.e., fluorescence intensity of the nucleus.
@@ -85,16 +85,16 @@ class Nucleus(BaseModel):
     # Core positional and geometric properties
     # TODO: introduce unit of measurement to have more realistic reference values!
     centroid: Annotated[tuple[float, ...], AfterValidator(lambda x: np.asarray(x))]
-    "Coordinate of nucleus centroid as [X, Y, [Z]]."
+    "Coordinate of nucleus centroid as [[Z], Y, X]."
     semi_axes: Annotated[tuple[float, ...], AfterValidator(lambda x: np.asarray(x))]
-    "Semi-axes of the nucleus, in [X, Y, [Z]] ordering."
-    angle_z: float = 0.0
+    "Semi-axes of the nucleus, in [[Z], Y, X] ordering."
+    theta: float = 0.0
     """Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
     This is the only angle needed for the 2D case."""
-    angle_y: Optional[float] = None
+    phi: Optional[float] = None
     """Orientation angle relative to Y-axis (in degrees). Also referred to as `phi`.
     Needed for the 3D case."""
-    angle_x: Optional[float] = None
+    psi: Optional[float] = None
     """Orientation angle relative to Z-axis (in degrees). Also referred to as `psi`.
     Needed for the 3D case."""
     
@@ -137,13 +137,13 @@ class Nucleus(BaseModel):
     @model_validator(mode="after")
     def _validate_angles(self):
         if self.is_3D:
-            if self.angle_y is None:
-                self.angle_y = 0.0
-            if self.angle_z is None:
-                self.angle_z = 0.0
+            if self.phi is None:
+                self.phi = 0.0
+            if self.psi is None:
+                self.psi = 0.0
         else:
-            if self.angle_y is not None or self.angle_z is not None:
-                raise ValueError("`angle_y` and `angle_z` are only used for 3D case.")
+            if self.phi is not None or self.psi is not None:
+                raise ValueError("`phi` and `psi` are only used for 3D case.")
         return self
     
     @model_validator(mode="after")
@@ -172,11 +172,11 @@ class Nucleus(BaseModel):
     
     @property
     def angles(self) -> tuple[float, ...]:
-        """Return orientation angles as a tuple in [X, Y, (Z)] order."""
+        """Return orientation angles as a tuple in [(Z), Y, X] order."""
         if self.is_3D:
-            return self.angle_x, self.angle_y, self.angle_z
+            return self.psi, self.phi, self.theta
         else:
-            return self.angle_x,
+            return self.theta,
     
     @property
     def bounding_box(self) -> tuple[tuple[float, float], ...]:
@@ -396,10 +396,10 @@ class Nucleus(BaseModel):
     
     def rotate(self) -> None:
         """Simulate random rotation."""
-        self.angle_x = self._update_angle(self.angle_x)
+        self.theta = self._update_angle(self.theta)
         if self.is_3D:
-            self.angle_y = self._update_angle(self.angle_y)
-            self.angle_z = self._update_angle(self.angle_z)
+            self.phi = self._update_angle(self.phi)
+            self.psi = self._update_angle(self.psi)
         
     def update_properties(self) -> None:
         """Update nucleus properties based on size, age, and other factors."""
@@ -464,15 +464,15 @@ class Nucleus(BaseModel):
     # TODO: make it a property?
     def _get_rotation_matrix(self) -> NDArray:
         """Calculate rotation matrix for nucleus orientation."""
-        theta = np.radians(self.angle_x)
+        theta = np.radians(self.theta)
         if not self.is_3D:
             return np.array([
                 [np.cos(theta), np.sin(theta)],
                 [-np.sin(theta), np.cos(theta)]
             ])
         else:
-            phi = np.radians(self.angle_y)
-            psi = np.radians(self.angle_z)
+            phi = np.radians(self.phi)
+            psi = np.radians(self.psi)
             Rx = np.array([
                 [1, 0, 0],
                 [0, np.cos(theta), -np.sin(theta)],
@@ -513,7 +513,7 @@ class Nucleus(BaseModel):
         coords = coords / self.semi_axes[:, None]
         
         # Calculate distances
-        distances = np.sqrt(np.sum(coords ** 2, axis=0))
+        distances: NDArray = np.sqrt(np.sum(coords ** 2, axis=0))
         
         return distances.reshape(self.space.size)
     

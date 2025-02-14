@@ -266,10 +266,10 @@ class Cluster(BaseModel):
                 r = np.random.uniform(0, radii)
                 centroid = center + r * np.array([np.cos(theta), np.sin(theta)])
             semi_axes = np.random.uniform(*semi_axes_range, size=len(center))
-            angles = {"angle_x": np.random.uniform(0, np.pi)}
+            angles = {"theta": np.random.uniform(0, np.pi)}
             if dim == "3D":
-                angles["angle_y"] = np.random.uniform(0, np.pi)
-                angles["angle_z"] = np.random.uniform(0, np.pi)
+                angles["phi"] = np.random.uniform(0, np.pi)
+                angles["psi"] = np.random.uniform(0, np.pi)
 
             # Create nucleus at position with Z,Y,X ordering
             nucleus = Nucleus(
@@ -287,7 +287,6 @@ class Cluster(BaseModel):
         # FIXME: add function call to avoid overlap of nuclei
 
         return cls(
-            idx=0,  # Added to match the required idx parameter
             nuclei=nuclei,
             idx=idx,
             space=space,

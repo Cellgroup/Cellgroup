@@ -221,11 +221,11 @@ class UpdateCoordinator(BaseModel):
             )
 
             # Apply new rotation
-            nucleus.angle_x = new_angles[0]
+            nucleus.theta = new_angles[0]
             if len(new_angles) > 1:
-                nucleus.angle_y = new_angles[1]
+                nucleus.phi = new_angles[1]
             if len(new_angles) > 2:
-                nucleus.angle_z = new_angles[2]
+                nucleus.psi = new_angles[2]
 
             return UpdateResult(
                 nucleus_id=nucleus.idx,
