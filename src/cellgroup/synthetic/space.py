@@ -1,17 +1,17 @@
+from typing import Annotated
+
 import numpy as np
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator, AfterValidator
 
 
 class Space(BaseModel):
     """Defines a space where synthetic data live."""
 
-    size: tuple[int, ...]
+    size: Annotated[tuple[int, ...], AfterValidator(lambda x: np.asarray(x))]
     "Size of space in pixels (Z, Y, X). Can be 2D or 3D."
 
-    scale: tuple[float, ...]
+    scale: Annotated[tuple[float, ...], AfterValidator(lambda x: np.asarray(x))]
     "Voxel size in each dimension in μm (Z, Y, X). Can be 2D or 3D."
-    
-    #TODO: private numpy attrs for speed-up (?) -> _size, _scale
     
     @field_validator('size')
     def validate_size(cls, value: tuple[int, ...]) -> tuple[int, ...]:

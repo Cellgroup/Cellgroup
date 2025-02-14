@@ -4,8 +4,9 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from cellgroup.synthetic.nucleus import Nucleus, Status
+from cellgroup.synthetic.nucleus import Nucleus
 from cellgroup.synthetic.space import Space
+from cellgroup.synthetic.utils import Status
 
 
 class Cluster(BaseModel):
@@ -15,6 +16,9 @@ class Cluster(BaseModel):
     
     idx: int
     "Unique cluster index."
+    
+    space: Space
+    "Space where the cluster exists."
 
     nuclei: list[Nucleus] = Field(default_factory=list)
     "List of active nuclei in the cluster."
@@ -26,7 +30,7 @@ class Cluster(BaseModel):
     "List of nuclei in the cluster that have undergone division."
 
     # Geometric properties
-    max_radius: tuple[int, ...]
+    max_radius: tuple[float, ...]
     "Maximum radius in each dimension."
 
     concentration: float = Field(gt=0.0) # lt=1.0)
@@ -208,15 +212,15 @@ class Cluster(BaseModel):
         self.apply_forces()
     
 
-    def render(self, space: Space) -> NDArray:
+    def render(self) -> NDArray:
         """Render the cluster."""
         if self.is_empty:
-            return np.zeros(space.size)
+            return np.zeros(self.space.size)
 
         # Render each nucleus
-        image = np.zeros(space.size)
+        image = np.zeros(self.space.size)
         for nucleus in self.nuclei:
-            image += nucleus.render(space)
+            image += nucleus.render()
 
         return image
 
@@ -224,40 +228,60 @@ class Cluster(BaseModel):
     def create_random_cluster(
         cls,
         space: Space,
+        time: int,
+        idx: int,
         n_nuclei: int,
-        center: tuple[float, float],
-        radius: float,
+        center: tuple[float, ...],
+        radii: tuple[float, ...],
+        semi_axes_range: tuple[float, float],
         **kwargs
     ) -> 'Cluster':
         """Create a cluster with randomly positioned nuclei."""
+        assert len(center) == len(radii) == len(space.size), (
+            "Center and radius must match space dimensions!"
+        )
+        dim = "3D" if len(center) == 3 else "2D"
+        
         nuclei = []
-        for _ in range(n_nuclei):
+        for i in range(n_nuclei):
             # Generate random position within radius
-            angle = np.random.uniform(0, 2 * np.pi)
-            r = np.random.uniform(0, radius)
-            x = center[0] + r * np.cos(angle)
-            y = center[1] + r * np.sin(angle)
+            if dim == "3D":
+                theta = np.random.uniform(0, 2 * np.pi)
+                phi = np.random.uniform(0, np.pi)
+                r = np.random.uniform(0, radii)
+                centroid = center + r * np.array([
+                    np.cos(theta) * np.sin(phi), np.sin(theta) * np.sin(phi), np.cos(phi)
+                ])
+            elif dim == "2D":
+                theta = np.random.uniform(0, 2 * np.pi)
+                r = np.random.uniform(0, radii)
+                centroid = center + r * np.array([np.cos(theta), np.sin(theta)])
+            semi_axes = np.random.uniform(*semi_axes_range, size=len(center))
+            angles = {"angle_x": np.random.uniform(0, np.pi)}
+            if dim == "3D":
+                angles["angle_y"] = np.random.uniform(0, np.pi)
+                angles["angle_z"] = np.random.uniform(0, np.pi)
 
             # Create nucleus at position
             nucleus = Nucleus(
-                id=len(nuclei),
-                dim="2D",
-                XM=x,
-                YM=y,
-                centroid=(int(x), int(y), 0),
-                Major=np.random.uniform(10, 20),
-                Minor=np.random.uniform(8, 15),
-                Angle=np.random.uniform(0, 360),
-                RawIntDen=1000,
-                Labels=0,
-                Time=0
+                idx=i,
+                space=space,
+                dim=dim,
+                time=time,
+                centroid=centroid,
+                semi_axes=semi_axes,
+                **angles,
+                # TODO: pass other args in a pydantic config
             )
             nuclei.append(nucleus)
+            
+        # FIXME: add function call to avoid overlap of nuclei
 
         return cls(
             nuclei=nuclei,
+            idx=idx,
             space=space,
-            max_radius=(radius, radius, 1),
-            concentration=n_nuclei / (np.pi * radius ** 2),
+            max_radius=radii,
+            concentration=n_nuclei / np.prod(radii),    
             **kwargs
         )

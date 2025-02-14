@@ -1,29 +1,19 @@
 from __future__ import annotations
 
-from enum import Enum
-from typing import Optional, Literal, Sequence
+from typing import Annotated, Optional
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 from numpy.typing import NDArray
 
 from cellgroup.synthetic.space import Space
+from cellgroup.synthetic.utils import Status
 
 # NOTE: we do all the geometric simulation with [X, Y, Z] order for simplicity.
 # Then we switch to [Z, Y, X] order for rendering purposes.
 
-
-class Status(Enum):
-    """Enumeration of nucleus status."""
-    ALIVE = "alive"
-    DEAD = "dead"
-    DIVIDED = "divided"
-    
-    def __str__(self):
-        return self.value
-
-
 # TODO: make separate classes for 2D and 3D nuclei (?)
+# TODO: do we really need pydantic here? -> maybe make pydantic model for attributes and separately pass to Nucleus instance
 class Nucleus(BaseModel):
     """Defines a nucleus instance with minimal core properties and growth dynamics.
     
@@ -89,12 +79,14 @@ class Nucleus(BaseModel):
     "Age of nucleus in timesteps."
     status: Status = Status.ALIVE
     "Viability status."
+    space: Space
+    "Geometrical space where the nucleus exists."
 
     # Core positional and geometric properties
     # TODO: introduce unit of measurement to have more realistic reference values!
-    centroid: tuple[float, ...]
+    centroid: Annotated[tuple[float, ...], AfterValidator(lambda x: np.asarray(x))]
     "Coordinate of nucleus centroid as [X, Y, [Z]]."
-    semi_axes: tuple[float, ...]
+    semi_axes: Annotated[tuple[float, ...], AfterValidator(lambda x: np.asarray(x))]
     "Semi-axes of the nucleus, in [X, Y, [Z]] ordering."
     angle_x: float = 0.0
     """Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
@@ -112,6 +104,7 @@ class Nucleus(BaseModel):
     Disabled if `None`."""
     
     # Growth and death properties
+    # TODO: put all of these in a config file!
     # TODO: it would be nice to set ranges for these values to avoid unrealistic values
     growth_rate: Optional[float] = 0.1
     "Base growth rate. Disabled if `None`."
@@ -129,14 +122,6 @@ class Nucleus(BaseModel):
     "Probability of death. Disabled if `None`."
     division_prob: Optional[float] = 0.0
     "Probability of division. Disabled if `None`."
-    
-    @field_validator("centroid")
-    def _convert__centroid_to_array(cls, value):
-        return np.asarray(value)
-    
-    @field_validator("semi_axes")
-    def _convert_semiaxes_to_array(cls, value):
-        return np.asarray(value)
     
     @model_validator(mode="after")
     def _validate_dims(self):
@@ -159,6 +144,15 @@ class Nucleus(BaseModel):
         else:
             if self.angle_y is not None or self.angle_z is not None:
                 raise ValueError("`angle_y` and `angle_z` are only used for 3D case.")
+        return self
+    
+    @model_validator(mode="after")
+    def _validate_wrt_space(self):
+        if len(self.centroid) != self.space.ndim:
+            raise ValueError(
+                f"Centroid and space dimensions must match: "
+                f"{len(self.centroid)} != {self.space.ndim}."
+            )
         return self
     
     # TODO: add more validators (if needed)
@@ -310,7 +304,8 @@ class Nucleus(BaseModel):
         # simulate death with a rapid size decrease
         shrink_factor = 0.5
         self.semi_axes = self.semi_axes * shrink_factor
-        self.raw_int_density *= shrink_factor
+        if self.raw_int_density is not None:
+            self.raw_int_density *= shrink_factor
         
     def check_division(self) -> bool:
         """Check if the nucleus should divide based on various conditions."""
@@ -351,7 +346,7 @@ class Nucleus(BaseModel):
 
         # --- Rescale sizes (maintaining ~ total size)
         scale_factor = 1 / 2**(1/3)
-        scale_factor = np.random.normal(scale_factor, 0.05)
+        scale_factor = np.random.normal(scale_factor, 0.01)
         d1.semi_axes = self.semi_axes * scale_factor
         d2.semi_axes = self.semi_axes * scale_factor
 
@@ -377,25 +372,34 @@ class Nucleus(BaseModel):
         
         return d1, d2
     
-    def move(self, space_shape: tuple[int, ...]) -> None:
+    def move(self) -> None:
         """Simulate random movement as Brownian motion."""
         # TODO: checks to implement:
         # - make sure nucleus does not exit the cluster (or maybe it could?)
         
         # simulate displacement
-        diffusion_coefficient = 1.0  #TODO: move into parameters
+        diffusion_coefficient = 10.0  #TODO: move into parameters
         displacements = np.random.normal(
             0, np.sqrt(2 * diffusion_coefficient), len(self.centroid)
         )
         # constraint displacements to stay in the image space
         margin = 10  #TODO: move into parameters
-        self.centroid = np.minimum(displacements + self.centroid, space_shape - margin)
+        self.centroid = np.minimum(
+            displacements + self.centroid, np.asarray(self.space.size) - margin
+        )
 
+    def _update_angle(self, angle: float) -> None:
+        """Update orientation of a single angle."""
+        rotation_rate = 20  # Degrees per timestep #TODO: move into parameters
+        dangle = np.random.normal(0, rotation_rate)
+        return (angle + dangle) % 360
+    
     def rotate(self) -> None:
         """Simulate random rotation."""
-        rotation_rate = 0.1  # Degrees per timestep #TODO: move into parameters
-        dangle = np.random.normal(0, rotation_rate)
-        self.angle = (self.angle + dangle) % 360
+        self.angle_x = self._update_angle(self.angle_x)
+        if self.is_3D:
+            self.angle_y = self._update_angle(self.angle_y)
+            self.angle_z = self._update_angle(self.angle_z)
         
     def update_properties(self) -> None:
         """Update nucleus properties based on size, age, and other factors."""
@@ -434,6 +438,7 @@ class Nucleus(BaseModel):
         # --- Simulate division ---
         if self.check_division():
             self.status = Status.DIVIDED
+            # NOTE: division actually performed at cluster/sample level
             return self.status
 
         # --- Simulate growth ---
@@ -441,7 +446,8 @@ class Nucleus(BaseModel):
         self.semi_axes = self.semi_axes * np.sqrt(growth_factor)
 
         # Update intensity proportionally to area
-        self.raw_int_density *= growth_factor
+        if self.raw_int_density is not None:
+            self.raw_int_density *= growth_factor
 
         # --- Simulate random movement (Brownian motion) ---
         self.move()
@@ -484,13 +490,8 @@ class Nucleus(BaseModel):
             ])
             return np.dot(Rz, np.dot(Ry, Rx))
             
-    def _compute_ellipsoidal_distances(self, space_shape: tuple[int, ...]) -> NDArray:
+    def _compute_ellipsoidal_distances(self) -> NDArray:
         """Calculate distances from nucleus centroid in the ellipsoidal space.
-        
-        Parameters
-        ----------
-        space_shape : tuple[int, ...]
-            Shape of the space in which the nucleus lives. Coords given as [(Z), Y, X].
         
         Returns
         -------
@@ -499,8 +500,8 @@ class Nucleus(BaseModel):
             coordinate grid.
         """
         # Generate grid of coordinates
-        coords = np.mgrid[tuple(slice(0, s) for s in space_shape)] # shape: (ndims, (Z), Y, X)
-        coords = coords.reshape(len(space_shape), -1)
+        coords = np.mgrid[tuple(slice(0, s) for s in self.space.size)] # shape: (ndims, (Z), Y, X)
+        coords = coords.reshape(len(self.space.size), -1)
         
         # Center coordinates
         coords = coords - self.centroid[:, None]
@@ -514,9 +515,9 @@ class Nucleus(BaseModel):
         # Calculate distances
         distances = np.sqrt(np.sum(coords ** 2, axis=0))
         
-        return distances.reshape(space_shape)
+        return distances.reshape(self.space.size)
     
-    def render(self, space: Space) -> NDArray:
+    def render(self) -> NDArray:
         """Render the nucleus as a binary mask in the given space.
         
         Returns
@@ -525,11 +526,11 @@ class Nucleus(BaseModel):
             Binary mask of the nucleus in the space.
         """
         # Calculate distances from centroid
-        distances = self._compute_ellipsoidal_distances(space.size)
+        distances = self._compute_ellipsoidal_distances()
         
         # Create binary mask
-        mask = distances <= 1.0        
-        return mask
+        mask = distances <= 1.0      
+        return mask.astype(np.uint8)
 
 
 
