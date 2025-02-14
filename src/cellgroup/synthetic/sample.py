@@ -152,7 +152,7 @@ class Sample(BaseModel):
 
     def update(self) -> None:
         """Update the status of clusters in the sample."""
-        self.timestep += 1
+        self.time += 1
 
         # Update individual clusters
         active_clusters = []

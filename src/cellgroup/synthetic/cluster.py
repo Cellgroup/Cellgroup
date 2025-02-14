@@ -213,7 +213,7 @@ class Cluster(BaseModel):
         self.nuclei = alive_nuclei
 
         # --- Apply inter-cluster forces
-        self.apply_forces()
+        # self.apply_forces()
     
 
     def render(self, border: bool = False) -> NDArray:
