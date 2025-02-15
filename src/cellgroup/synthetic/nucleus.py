@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import Optional, Literal, Sequence
+from typing import Annotated, Optional
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 from numpy.typing import NDArray
 
 from cellgroup.synthetic.space import Space
+from cellgroup.synthetic.utils import Status
 
 # NOTE: we do all the geometric simulation with [X, Y, Z] order for simplicity.
 # Then we switch to [Z, Y, X] order for rendering purposes.
 
 # TODO: make separate classes for 2D and 3D nuclei (?)
+# TODO: do we really need pydantic here? -> maybe make pydantic model for attributes and separately pass to Nucleus instance
 class Nucleus(BaseModel):
     """Defines a nucleus instance with minimal core properties and growth dynamics.
     
@@ -27,8 +29,9 @@ class Nucleus(BaseModel):
         Global timestep of simulation.
     eta : int, default=0
         Age of nucleus in timesteps.
-    is_alive : Optional[bool], default=True
-        Viability status.
+    status : Status, default=Status.ALIVE
+        Current status of the nucleus, one of `Status.ALIVE`, `Status.DEAD`, or
+        `Status.DIVIDED`.
     centroid : tuple[float, ...]
         Coordinate of nucleus centroid as [X, Y, [Z]].
     semi_axes : tuple[float, ...]
@@ -74,14 +77,16 @@ class Nucleus(BaseModel):
     "Global timestep of simulation."
     eta: int = 0
     "Age of nucleus in timesteps."
-    is_alive: Optional[bool] = True
+    status: Status = Status.ALIVE
     "Viability status."
+    space: Space
+    "Geometrical space where the nucleus exists."
 
     # Core positional and geometric properties
     # TODO: introduce unit of measurement to have more realistic reference values!
-    centroid: tuple[float, ...]
+    centroid: Annotated[tuple[float, ...], AfterValidator(lambda x: np.asarray(x))]
     "Coordinate of nucleus centroid as [X, Y, [Z]]."
-    semi_axes: tuple[float, ...]
+    semi_axes: Annotated[tuple[float, ...], AfterValidator(lambda x: np.asarray(x))]
     "Semi-axes of the nucleus, in [X, Y, [Z]] ordering."
     angle_x: float = 0.0
     """Orientation angle relative to X-axis (in degrees). Also referred to as `theta`.
@@ -99,6 +104,7 @@ class Nucleus(BaseModel):
     Disabled if `None`."""
     
     # Growth and death properties
+    # TODO: put all of these in a config file!
     # TODO: it would be nice to set ranges for these values to avoid unrealistic values
     growth_rate: Optional[float] = 0.1
     "Base growth rate. Disabled if `None`."
@@ -116,14 +122,6 @@ class Nucleus(BaseModel):
     "Probability of death. Disabled if `None`."
     division_prob: Optional[float] = 0.0
     "Probability of division. Disabled if `None`."
-    
-    @field_validator("centroid")
-    def _convert__centroid_to_array(cls, value):
-        return np.asarray(value)
-    
-    @field_validator("semi_axes")
-    def _convert_semiaxes_to_array(cls, value):
-        return np.asarray(value)
     
     @model_validator(mode="after")
     def _validate_dims(self):
@@ -146,6 +144,15 @@ class Nucleus(BaseModel):
         else:
             if self.angle_y is not None or self.angle_z is not None:
                 raise ValueError("`angle_y` and `angle_z` are only used for 3D case.")
+        return self
+    
+    @model_validator(mode="after")
+    def _validate_wrt_space(self):
+        if len(self.centroid) != self.space.ndims:
+            raise ValueError(
+                f"Centroid and space dimensions must match: "
+                f"{len(self.centroid)} != {self.space.ndims}."
+            )
         return self
     
     # TODO: add more validators (if needed)
@@ -277,7 +284,7 @@ class Nucleus(BaseModel):
 
     def check_death(self) -> bool:
         """Check if the nucleus should die based on various conditions."""
-        if not self.is_alive:
+        if self.status == Status.DEAD:
             return False
 
         # Death conditions
@@ -292,11 +299,13 @@ class Nucleus(BaseModel):
 
     def die(self) -> None:
         """Simulate death of nucleus by progressively reducing its size."""
-        self.is_alive = False
+        self.status = Status.DEAD
+        
         # simulate death with a rapid size decrease
         shrink_factor = 0.5
         self.semi_axes = self.semi_axes * shrink_factor
-        self.raw_int_density *= shrink_factor
+        if self.raw_int_density is not None:
+            self.raw_int_density *= shrink_factor
         
     def check_division(self) -> bool:
         """Check if the nucleus should divide based on various conditions."""
@@ -309,83 +318,95 @@ class Nucleus(BaseModel):
         return False    
 
     def divide(self) -> tuple["Nucleus", "Nucleus"]:
-        """Divide nucleus if conditions are met and return the 2 daughter nuclei."""
-        # Create daughter nucleus with same properties
+        """Divide nucleus if conditions are met and return the two daughter nuclei.
+        
+        **Assumptions** 
+        1. Time resolution of desired timelapses is way larger than the typical
+        division time of a nucleus. Hence, we don't need to model the position of cells
+        after division with high precision.
+        2. In our pipeline, division is the first thing happening in the update call.
+        Specifically, we assume that division happens immediately at the beginning of
+        the timestep, hence daughter cells have time to grow and move during the same
+        timestep.
+
+        **How it works**
+        - Division happens at the mid point of the longest axis.
+        - Volume is divided equally plus some noise.
+        - Intensity density is divided roughly equally plus some noise.
+        - Centroids of daughter cells are places at the vertices of the longest axis.
+        - Daughter cells have the same orientation of the mother.
+        Last two points are not realistic, but it is fine as these nuclei will move
+        and rotate during the same timestep.
+        """
+        # --- Create daughter nucleus with same properties
         d1, d2 = self.model_copy(), self.model_copy()
         d1.idx, d2.idx = self.idx + 1000, self.idx + 1001
         d1.eta = d2.eta = 0
         d1.lineage, d2.lineage = self.lineage + [self.idx], self.lineage + [self.idx]
 
-        # Scale down sizes (maintain total size)
-        scale_factor = 1 / np.sqrt(2)
-        d1.semi_axes = d2.semi_axes = self.semi_axes * scale_factor
+        # --- Rescale sizes (maintaining ~ total size)
+        scale_factor = 1 / 2**(1/3)
+        scale_factor = np.random.normal(scale_factor, 0.01)
+        d1.semi_axes = self.semi_axes * scale_factor
+        d2.semi_axes = self.semi_axes * scale_factor
 
-        # Divide intensity roughly equally (with some noise)
-        intensity_ratio = np.random.normal(0.5, 0.05)
-        d1.raw_int_density *= intensity_ratio
-        d2.raw_int_density *= (1 - intensity_ratio)
+        # --- Divide intensity roughly equally (with some noise)
+        if self.raw_int_density is not None:
+            intensity_ratio = np.random.normal(0.5, 0.05)
+            d1.raw_int_density *= intensity_ratio
+            d2.raw_int_density *= (1 - intensity_ratio)
+
+        # --- Calculate new centroids position
+        longest_axis_idx = np.argmax(self.semi_axes)
+        longest_axis = self.semi_axes[longest_axis_idx]
+        # get vertices of the longest axis
+        d1.centroid = np.zeros_like(self.centroid)
+        d1.centroid[longest_axis_idx] = longest_axis
+        d2.centroid = -d1.centroid
+        # rotate vertices and translate to mother centroid
+        d1.centroid = np.dot(self._get_rotation_matrix(), d1.centroid) + self.centroid
+        d2.centroid = np.dot(self._get_rotation_matrix(), d2.centroid) + self.centroid
         
-        # Calculate new positions # TODO: make clarity
-        # Hp: division happens along the major axis
-        division_angle = np.radians(self.angle + 90)
-        displacements = np.min(self.semi_axes)
-
-        # Calculate new positions
-        # dx = displacement * np.cos(division_angle)
-        # dy = displacement * np.sin(division_angle)
-
-        # Update positions
-        d1.semi_axes = d1.semi_axes - displacements
-        d2.semi_axes = self.semi_axes + 2 * displacements
-
-        # TODO: Remove mother cell from simulation
+        # --- Remove mother cell from simulation
+        self.status = Status.DIVIDED
         
         return d1, d2
     
-    def update(self) -> bool:
-        """Update nucleus properties for one timestep. Returns False if nucleus dies."""
-        if not self.is_alive:
-            return False
-
-        # Increment age
-        self.eta += 1
-
-        # --- Simulate death ---
-        if self.check_death():
-            self.die()
-            return False
+    def move(self) -> None:
+        """Simulate random movement as Brownian motion."""
+        # TODO: checks to implement:
+        # - make sure nucleus does not exit the cluster (or maybe it could?)
         
-        # --- Simulate division ---
-        if self.check_division():
-            self.divide() # check what to return here ...
-            return True
-
-        # --- Simulate growth ---
-        growth_factor = self._calculate_growth_factor()
-        self.semi_axes = self.semi_axes * np.sqrt(growth_factor)
-
-        # Update intensity proportionally to area
-        self.raw_int_density *= growth_factor
-
-        # --- Simulate random movement (Brownian motion) ---
-        diffusion_coefficient = 1.0  # Can be adjusted #TODO: move into parameters
+        # simulate displacement
+        diffusion_coefficient = 10.0  #TODO: move into parameters
         displacements = np.random.normal(
             0, np.sqrt(2 * diffusion_coefficient), len(self.centroid)
         )
-        self.centroid = self.centroid + displacements
-        
-        # TODO: checks to implement:
-        # - make sure nucleus does not leave the image Space
-        # - make sure nucleus does not overlap with other nuclei
-        # - make sure nucleus does not exit the cluster (or maybe it could?)
+        # constraint displacements to stay in the image space
+        margin = 10  #TODO: move into parameters
+        self.centroid = np.minimum(
+            displacements + self.centroid, np.asarray(self.space.size) - margin
+        )
 
-        # --- Simulate random rotation --- 
-        rotation_rate = 0.1  # Degrees per timestep #TODO: move into parameters
+    def _update_angle(self, angle: float) -> None:
+        """Update orientation of a single angle."""
+        rotation_rate = 20  # Degrees per timestep #TODO: move into parameters
         dangle = np.random.normal(0, rotation_rate)
-        self.angle = (self.angle + dangle) % 360
-
+        return (angle + dangle) % 360
+    
+    def rotate(self) -> None:
+        """Simulate random rotation."""
+        self.angle_x = self._update_angle(self.angle_x)
+        if self.is_3D:
+            self.angle_y = self._update_angle(self.angle_y)
+            self.angle_z = self._update_angle(self.angle_z)
+        
+    def update_properties(self) -> None:
+        """Update nucleus properties based on size, age, and other factors."""
         # --- Update division probability based on size and age ---
-        size_factor = max(0, (self._size - self.min_division_size) / self.min_division_size)
+        size_factor = max(
+            0, (self._size - self.min_division_size) / self.min_division_size
+        )
         age_factor = np.exp(-self.eta / 50)  # Decreases with age
         self.division_prob = 0.1 * size_factor * age_factor  # Base rate * factors
 
@@ -394,7 +415,50 @@ class Nucleus(BaseModel):
         age_factor = self.eta / self.max_age
         self.death_prob = min(0.8, age_factor + stress_factor)
 
-        return True
+    def update(self) -> Status:
+        """Update nucleus properties returning its status after the update.
+        
+        Returns
+        -------
+        Status
+            Status of the nucleus after the update, i.e., one of `Status.ALIVE`,
+            `Status.DEAD`, or `Status.DIVIDED`.
+        """
+        if self.status != Status.ALIVE:
+            return self.status
+
+        # Increment age
+        self.eta += 1
+
+        # --- Simulate death ---
+        if self.check_death():
+            self.die()
+            return self.status
+        
+        # --- Simulate division ---
+        if self.check_division():
+            self.status = Status.DIVIDED
+            # NOTE: division actually performed at cluster/sample level
+            return self.status
+
+        # --- Simulate growth ---
+        growth_factor = self._calculate_growth_factor()
+        self.semi_axes = self.semi_axes * np.sqrt(growth_factor)
+
+        # Update intensity proportionally to area
+        if self.raw_int_density is not None:
+            self.raw_int_density *= growth_factor
+
+        # --- Simulate random movement (Brownian motion) ---
+        self.move()
+
+        # --- Simulate random rotation ---
+        self.rotate()
+
+        # --- Update nucleus properties ---
+        self.update_properties()
+
+        return self.status
     
     # --- Methods for rendering purpose ---
     # TODO: make it a property?
@@ -426,13 +490,8 @@ class Nucleus(BaseModel):
             ])
             return np.dot(Rz, np.dot(Ry, Rx))
             
-    def _compute_ellipsoidal_distances(self, space_shape: tuple[int, ...]) -> NDArray:
+    def _compute_ellipsoidal_distances(self) -> NDArray:
         """Calculate distances from nucleus centroid in the ellipsoidal space.
-        
-        Parameters
-        ----------
-        space_shape : tuple[int, ...]
-            Shape of the space in which the nucleus lives. Coords given as [(Z), Y, X].
         
         Returns
         -------
@@ -441,8 +500,8 @@ class Nucleus(BaseModel):
             coordinate grid.
         """
         # Generate grid of coordinates
-        coords = np.mgrid[tuple(slice(0, s) for s in space_shape)] # shape: (ndims, (Z), Y, X)
-        coords = coords.reshape(len(space_shape), -1)
+        coords = np.mgrid[tuple(slice(0, s) for s in self.space.size)] # shape: (ndims, (Z), Y, X)
+        coords = coords.reshape(len(self.space.size), -1)
         
         # Center coordinates
         coords = coords - self.centroid[:, None]
@@ -456,9 +515,9 @@ class Nucleus(BaseModel):
         # Calculate distances
         distances = np.sqrt(np.sum(coords ** 2, axis=0))
         
-        return distances.reshape(space_shape)
+        return distances.reshape(self.space.size)
     
-    def render(self, space: Space) -> NDArray:
+    def render(self) -> NDArray:
         """Render the nucleus as a binary mask in the given space.
         
         Returns
@@ -467,11 +526,11 @@ class Nucleus(BaseModel):
             Binary mask of the nucleus in the space.
         """
         # Calculate distances from centroid
-        distances = self._compute_ellipsoidal_distances(space.size)
+        distances = self._compute_ellipsoidal_distances()
         
         # Create binary mask
-        mask = distances <= 1.0        
-        return mask
+        mask = distances <= 1.0      
+        return mask.astype(np.uint8)
 
 
 

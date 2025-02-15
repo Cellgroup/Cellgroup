@@ -3,9 +3,11 @@ from typing import Optional
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from tqdm import tqdm
 
 from cellgroup.synthetic.nucleus import Nucleus
 from cellgroup.synthetic.space import Space
+from cellgroup.synthetic.utils import Status
 
 
 class Cluster(BaseModel):
@@ -15,17 +17,24 @@ class Cluster(BaseModel):
     
     idx: int
     "Unique cluster index."
+    
+    time: int
+    "Current timestep of the simulation."
+    
+    space: Space
+    "Space where the cluster exists."
 
     nuclei: list[Nucleus] = Field(default_factory=list)
     "List of active nuclei in the cluster."
     
     dead_nuclei: list[Nucleus] = Field(default_factory=list)
     "List of dead nuclei in the cluster."
-    # might be useful for analysis (e.g., lineage)
-    # it is more efficient to keep them separate than to avoid calling update() on them
+    
+    divided_nuclei: list[Nucleus] = Field(default_factory=list)
+    "List of nuclei in the cluster that have undergone division."
 
     # Geometric properties
-    max_radius: tuple[int, ...]
+    max_radius: tuple[float, ...]
     "Maximum radius in each dimension."
 
     concentration: float = Field(gt=0.0) # lt=1.0)
@@ -44,7 +53,7 @@ class Cluster(BaseModel):
     
     #TODO: implement nice __repr__ method to get a summary of the cluster
     
-    @field_validator("nuclei")
+    @field_validator("nuclei", "dead_nuclei", "divided_nuclei")
     def _validate_nuclei_ndims(cls, v: list[Nucleus]) -> list[Nucleus]:
         """Check if all nuclei have the same dimensionality."""
         if not v:
@@ -150,33 +159,10 @@ class Cluster(BaseModel):
                 forces[j] = (forces[j][0] + force * dx, forces[j][1] + force * dy)
 
         return forces
-
-    def update(self):
-        """Update the status of nuclei in the cluster."""
-        if self.count == 0:
-            return
-
-        # Update individual nuclei
-        alive_nuclei = []
-        for nucleus in self.nuclei:
-            nucleus.update()
-            
-            #TODO: implement check for new position
-            
-            # Remove dead nuclei
-            if not nucleus.is_alive:
-                alive_nuclei.append(nucleus)                
-            else:
-                self.dead_nuclei.append(nucleus)
-
-            # Check for division #TODO: for coherence, this should happen in nucleus.update()
-            if nucleus.Area >= nucleus.min_division_size:
-                daughter = nucleus.divide()
-                if daughter != nucleus:
-                    alive_nuclei.append(daughter)
-
-        self.nuclei = alive_nuclei
-
+    
+    def apply_forces(self) -> None:
+        """Apply forces to nuclei in the cluster."""
+        raise NotImplementedError("Force application not implemented yet!")
         # Calculate and apply forces
         forces = self._calculate_forces()
 
@@ -200,56 +186,115 @@ class Cluster(BaseModel):
             
             #TODO: can a nucleus be kicked out of the cluster due to repulsion?
 
-    def render(self, space: Space) -> NDArray:
+    def update(self) -> None:
+        """Update the status of nuclei in the cluster."""
+        if self.count == 0:
+            return
+
+        # --- Update individual nuclei
+        alive_nuclei = []
+        for nucleus in self.nuclei:
+            curr_status = nucleus.update()
+            
+            #TODO: implement check for new position (or at sample level)
+            
+            # --- Remove dead & divided nuclei
+            if curr_status == Status.ALIVE:
+                alive_nuclei.append(nucleus)                
+            elif curr_status == Status.DIVIDED:
+                # If nucleus has divided, compute the daugters
+                d1, d2 = nucleus.divide()
+                alive_nuclei.append(d1)
+                alive_nuclei.append(d2)
+                self.divided_nuclei.append(nucleus)
+            elif curr_status == Status.DEAD:
+                self.dead_nuclei.append(nucleus)
+
+        self.nuclei = alive_nuclei
+
+        # --- Apply inter-cluster forces
+        # self.apply_forces()
+    
+
+    def render(self, border: bool = False) -> NDArray:
         """Render the cluster."""
         if self.is_empty:
-            return np.zeros(space.size)
+            return np.zeros(self.space.size)
 
         # Render each nucleus
-        image = np.zeros(space.size)
-        for nucleus in self.nuclei:
-            image += nucleus.render(space)
+        # TODO: vectorize rendering (especially for 3D)
+        image = np.zeros(self.space.size)
+        for nucleus in tqdm(
+            self.nuclei, desc=f"Rendering nuclei in cluster {self.idx}"
+        ):
+            image += nucleus.render()
+        print("------------------------------")
 
+        # Add border if requested
+        if border:
+            raise NotImplementedError("Border rendering not implemented yet!")
+        
         return image
 
     @classmethod
     def create_random_cluster(
         cls,
         space: Space,
+        time: int,
+        idx: int,
         n_nuclei: int,
-        center: tuple[float, float],
-        radius: float,
+        center: tuple[float, ...],
+        radii: tuple[float, ...],
+        semi_axes_range: tuple[float, float],
         **kwargs
     ) -> 'Cluster':
         """Create a cluster with randomly positioned nuclei."""
+        assert len(center) == len(radii) == len(space.size), (
+            "Center and radius must match space dimensions!"
+        )
+        dim = "3D" if len(center) == 3 else "2D"
+        
         nuclei = []
-        for _ in range(n_nuclei):
+        for i in range(n_nuclei):
             # Generate random position within radius
-            angle = np.random.uniform(0, 2 * np.pi)
-            r = np.random.uniform(0, radius)
-            x = center[0] + r * np.cos(angle)
-            y = center[1] + r * np.sin(angle)
+            if dim == "3D":
+                theta = np.random.uniform(0, 2 * np.pi)
+                phi = np.random.uniform(0, np.pi)
+                r = np.random.uniform(0, radii)
+                centroid = center + r * np.array([
+                    np.cos(theta) * np.sin(phi), np.sin(theta) * np.sin(phi), np.cos(phi)
+                ])
+            elif dim == "2D":
+                theta = np.random.uniform(0, 2 * np.pi)
+                r = np.random.uniform(0, radii)
+                centroid = center + r * np.array([np.cos(theta), np.sin(theta)])
+            semi_axes = np.random.uniform(*semi_axes_range, size=len(center))
+            angles = {"angle_x": np.random.uniform(0, np.pi)}
+            if dim == "3D":
+                angles["angle_y"] = np.random.uniform(0, np.pi)
+                angles["angle_z"] = np.random.uniform(0, np.pi)
 
             # Create nucleus at position
             nucleus = Nucleus(
-                id=len(nuclei),
-                dim="2D",
-                XM=x,
-                YM=y,
-                centroid=(int(x), int(y), 0),
-                Major=np.random.uniform(10, 20),
-                Minor=np.random.uniform(8, 15),
-                Angle=np.random.uniform(0, 360),
-                RawIntDen=1000,
-                Labels=0,
-                Time=0
+                idx=i,
+                space=space,
+                dim=dim,
+                time=time,
+                centroid=centroid,
+                semi_axes=semi_axes,
+                **angles,
+                # TODO: pass other args in a pydantic config
             )
             nuclei.append(nucleus)
+            
+        # FIXME: add function call to avoid overlap of nuclei
 
         return cls(
             nuclei=nuclei,
+            idx=idx,
             space=space,
-            max_radius=(radius, radius, 1),
-            concentration=n_nuclei / (np.pi * radius ** 2),
+            time=time,
+            max_radius=radii,
+            concentration=n_nuclei / np.prod(radii),    
             **kwargs
         )
