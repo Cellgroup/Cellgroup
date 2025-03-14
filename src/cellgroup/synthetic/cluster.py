@@ -95,11 +95,6 @@ class Cluster(BaseModel):
     def is_empty(self) -> bool:
         """Check if cluster is empty."""
         return self.count == 0
-    
-    @property
-    def bounding_box(self) -> Optional[tuple[tuple[int, int], ...]]:
-        """Get bounding box of the cluster."""
-        raise NotImplementedError("Bounding box calculation not implemented yet!")
 
     @property
     def centroid(self) -> Optional[np.ndarray]:
@@ -133,28 +128,24 @@ class Cluster(BaseModel):
         for i, nucleus1 in enumerate(self.nuclei):
             for j, nucleus2 in enumerate(self.nuclei[i + 1:], i + 1):
                 # Calculate distance between nuclei
-                dx = nucleus2.XM - nucleus1.XM
-                dy = nucleus2.YM - nucleus1.YM
+                # Access X coordinate as centroid[2], Y as centroid[1]
+                dx = nucleus2.centroid[2] - nucleus1.centroid[2]  # Changed from XM
+                dy = nucleus2.centroid[1] - nucleus1.centroid[1]  # Changed from YM
                 distance = np.sqrt(dx ** 2 + dy ** 2)
 
                 if distance == 0:
                     continue
 
-                # Normalized direction
+                # Rest of the force calculation remains the same
                 dx /= distance
                 dy /= distance
 
-                # Repulsive force (decreases with distance)
                 repulsion = self.repulsion_strength / (distance ** 2)
-
-                # Adhesive force (increases then decreases with distance)
                 optimal_distance = (nucleus1.Major + nucleus2.Major) / 4
                 adhesion = self.adhesion_strength * (distance - optimal_distance) * np.exp(-distance / optimal_distance)
 
-                # Total force
                 force = repulsion - adhesion
 
-                # Add to force vectors
                 forces[i] = (forces[i][0] - force * dx, forces[i][1] - force * dy)
                 forces[j] = (forces[j][0] + force * dx, forces[j][1] + force * dy)
 
@@ -166,25 +157,26 @@ class Cluster(BaseModel):
         # Calculate and apply forces
         forces = self._calculate_forces()
 
-        # Update positions based on forces #TODO: adapt to 3D
+        # Update positions based on forces
         for nucleus, (fx, fy) in zip(self.nuclei, forces):
-            # Add random noise #TODO: isn't this already in nucleus.update()?
+            # Add random noise
+            # TODO: isn't this already in nucleus.update()?
             fx += np.random.normal(0, self.noise_strength)
             fy += np.random.normal(0, self.noise_strength)
 
             # Update position
-            new_x = nucleus.XM + fx
-            new_y = nucleus.YM + fy
-
+            new_x = nucleus.centroid[2] + fx  # Changed from XM
+            new_y = nucleus.centroid[1] + fy  # Changed from YM
+            # TODO: implement check for new position
             # Keep within bounds
-            new_x = np.clip(new_x, 0, self.space.size[0])
-            new_y = np.clip(new_y, 0, self.space.size[1])
+            new_x = np.clip(new_x, 0, self.max_radius[0])
+            new_y = np.clip(new_y, 0, self.max_radius[1])
 
-            nucleus.XM = new_x
-            nucleus.YM = new_y
-            nucleus.centroid = (int(new_x), int(new_y), 0)
-            
-            #TODO: can a nucleus be kicked out of the cluster due to repulsion?
+            # Update nucleus position in Z,Y,X order
+            nucleus.centroid = (0, new_y, new_x)  # Changed from (new_x, new_y, 0)
+
+            # TODO: adapt to 3D
+            # TODO: can a nucleus be kicked out of the cluster due to repulsion?
 
     def update(self) -> None:
         """Update the status of nuclei in the cluster."""
@@ -236,6 +228,50 @@ class Cluster(BaseModel):
         
         return image
 
+    # Add these methods to the Cluster class in cluster.py
+    # You can either replace the existing methods or add these implementations
+
+    def apply_forces(self) -> None:
+        """Apply forces to nuclei in the cluster."""
+        # Calculate forces between nuclei
+        forces = self._calculate_forces()
+
+        # Update positions based on forces
+        for i, nucleus in enumerate(self.nuclei):
+            fx, fy = forces[i]
+
+            # Add random noise
+            fx += np.random.normal(0, self.noise_strength)
+            fy += np.random.normal(0, self.noise_strength)
+
+            # Convert to list for manipulation
+            new_centroid = list(nucleus.centroid)
+
+            # Update position
+            new_centroid[0] += fx
+            new_centroid[1] += fy
+
+            # Keep within bounds
+            new_centroid[0] = np.clip(new_centroid[0], 0, self.space.size[1] - 1)
+            new_centroid[1] = np.clip(new_centroid[1], 0, self.space.size[0] - 1)
+
+            # Update nucleus centroid
+            nucleus.centroid = tuple(new_centroid)
+
+    @property
+    def bounding_box(self) -> tuple[tuple[int, int], ...]:
+        """Get bounding box of the cluster."""
+        if self.is_empty:
+            return tuple((0, 0) for _ in range(self.ndims))
+
+        # Extract centroids and compute min/max
+        centroids = np.array([n.centroid for n in self.nuclei])
+        min_coords = np.min(centroids, axis=0)
+        max_coords = np.max(centroids, axis=0)
+
+        # Return as ((min_x, max_x), (min_y, max_y), [optional: (min_z, max_z)])
+        return tuple((int(min_c), int(max_c)) for min_c, max_c in zip(min_coords, max_coords))
+
     @classmethod
     def create_random_cluster(
         cls,
@@ -269,12 +305,12 @@ class Cluster(BaseModel):
                 r = np.random.uniform(0, radii)
                 centroid = center + r * np.array([np.cos(theta), np.sin(theta)])
             semi_axes = np.random.uniform(*semi_axes_range, size=len(center))
-            angles = {"angle_x": np.random.uniform(0, np.pi)}
+            angles = {"theta": np.random.uniform(0, np.pi)}
             if dim == "3D":
-                angles["angle_y"] = np.random.uniform(0, np.pi)
-                angles["angle_z"] = np.random.uniform(0, np.pi)
+                angles["phi"] = np.random.uniform(0, np.pi)
+                angles["psi"] = np.random.uniform(0, np.pi)
 
-            # Create nucleus at position
+            # Create nucleus at position with Z,Y,X ordering
             nucleus = Nucleus(
                 idx=i,
                 space=space,

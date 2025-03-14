@@ -98,6 +98,50 @@ class Sample(BaseModel):
 
         return tuple(ws / total_nuclei for ws in weighted_sum)
 
+
+    def get_cluster_metrics(self) -> dict[str, Any]:
+        """Calculate various metrics for the sample."""
+        if not self.clusters:
+            return {}
+
+        # Calculate cluster sizes (number of nuclei)
+        cluster_sizes = [c.count for c in self.clusters]
+
+        # Calculate total nuclei
+        total_nuclei = sum(cluster_sizes)
+
+        # Calculate inter-cluster distances
+        cluster_distances = []
+        centroids = [c.centroid for c in self.clusters if c.centroid is not None]
+        for i, c1 in enumerate(centroids):
+            for j, c2 in enumerate(centroids[i + 1:], i + 1):
+                dist = np.sqrt(sum((a - b) ** 2 for a, b in zip(c1, c2)))
+                cluster_distances.append((i, j, dist))
+
+        # Calculate mean nucleus size per cluster
+        mean_nucleus_sizes = []
+        for cluster in self.clusters:
+            if cluster.count > 0:
+                if cluster.is_3D:
+                    sizes = [n.volume for n in cluster.nuclei]
+                else:
+                    sizes = [n.area for n in cluster.nuclei]
+                mean_nucleus_sizes.append(np.mean(sizes))
+
+        # Build metrics dictionary
+        metrics = {
+            'time': self.time,
+            'n_clusters': self.count,
+            'total_nuclei': total_nuclei,
+            'nuclei_per_cluster': self.nuclei_count,
+            'mean_cluster_size': total_nuclei / max(1, self.count),
+            'cluster_sizes': cluster_sizes,
+            'cluster_distances': cluster_distances,
+            'mean_nucleus_sizes': mean_nucleus_sizes
+        }
+
+        return metrics
+
     def _check_cluster_merge(self) -> list[tuple[int, int]]:
         """Find clusters that should be merged."""
         merge_pairs = []
@@ -183,31 +227,6 @@ class Sample(BaseModel):
             image += cluster.render()
 
         return image
-
-    def get_cluster_metrics(self) -> dict[str, Any]:
-        """Calculate various metrics for the sample."""
-        raise NotImplementedError("Method not yet implemented.")
-        if not self.clusters:
-            return {}
-
-        metrics = {
-            'timestep': self.timestep,
-            'n_clusters': self.count,
-            'total_nuclei': self.total_nuclei,
-            'mean_cluster_size': self.total_nuclei / self.count,
-            'total_volume': sum(c.size for c in self.clusters),
-            'cluster_distances': [],
-            'cluster_sizes': [c.count for c in self.clusters]
-        }
-
-        # Calculate inter-cluster distances
-        centroids = [np.array(c.centroid[:2]) for c in self.clusters]
-        for i, c1 in enumerate(centroids):
-            for c2 in centroids[i + 1:]:
-                distance = np.linalg.norm(c2 - c1)
-                metrics['cluster_distances'].append(distance)
-
-        return metrics
 
     @classmethod
     def create_random_sample(

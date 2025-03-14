@@ -6,6 +6,6 @@ class Status(Enum):
     ALIVE = "alive"
     DEAD = "dead"
     DIVIDED = "divided"
-    
+
     def __str__(self):
         return self.value
