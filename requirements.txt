@@ -7,3 +7,4 @@ scikit-image
 matplotlib
 tifffile
 pydantic
+tqdm

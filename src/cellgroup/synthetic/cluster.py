@@ -95,11 +95,6 @@ class Cluster(BaseModel):
     def is_empty(self) -> bool:
         """Check if cluster is empty."""
         return self.count == 0
-    
-    @property
-    def bounding_box(self) -> Optional[tuple[tuple[int, int], ...]]:
-        """Get bounding box of the cluster."""
-        raise NotImplementedError("Bounding box calculation not implemented yet!")
 
     @property
     def centroid(self) -> Optional[np.ndarray]:
@@ -232,6 +227,50 @@ class Cluster(BaseModel):
             raise NotImplementedError("Border rendering not implemented yet!")
         
         return image
+
+    # Add these methods to the Cluster class in cluster.py
+    # You can either replace the existing methods or add these implementations
+
+    def apply_forces(self) -> None:
+        """Apply forces to nuclei in the cluster."""
+        # Calculate forces between nuclei
+        forces = self._calculate_forces()
+
+        # Update positions based on forces
+        for i, nucleus in enumerate(self.nuclei):
+            fx, fy = forces[i]
+
+            # Add random noise
+            fx += np.random.normal(0, self.noise_strength)
+            fy += np.random.normal(0, self.noise_strength)
+
+            # Convert to list for manipulation
+            new_centroid = list(nucleus.centroid)
+
+            # Update position
+            new_centroid[0] += fx
+            new_centroid[1] += fy
+
+            # Keep within bounds
+            new_centroid[0] = np.clip(new_centroid[0], 0, self.space.size[1] - 1)
+            new_centroid[1] = np.clip(new_centroid[1], 0, self.space.size[0] - 1)
+
+            # Update nucleus centroid
+            nucleus.centroid = tuple(new_centroid)
+
+    @property
+    def bounding_box(self) -> tuple[tuple[int, int], ...]:
+        """Get bounding box of the cluster."""
+        if self.is_empty:
+            return tuple((0, 0) for _ in range(self.ndims))
+
+        # Extract centroids and compute min/max
+        centroids = np.array([n.centroid for n in self.nuclei])
+        min_coords = np.min(centroids, axis=0)
+        max_coords = np.max(centroids, axis=0)
+
+        # Return as ((min_x, max_x), (min_y, max_y), [optional: (min_z, max_z)])
+        return tuple((int(min_c), int(max_c)) for min_c, max_c in zip(min_coords, max_coords))
 
     @classmethod
     def create_random_cluster(
