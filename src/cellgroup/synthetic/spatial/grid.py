@@ -164,6 +164,7 @@ class SpatialGrid(BaseModel):
                 raise ValueError(
                     f"Nucleus {nucleus.idx} size ({size}) exceeds cell size ({self.cell_size})"
                 )
+            #TODO: this should not be here --> move to a nucleus. Make it do a check.
 
     def _get_cells_for_nucleus(self, nucleus: Nucleus) -> Set[Tuple[int, ...]]:
         """Get all grid cells that a nucleus overlaps with."""
