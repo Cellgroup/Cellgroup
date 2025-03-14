@@ -4,7 +4,7 @@ import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Optional
 import time
 import psutil
 import numpy as np
@@ -13,10 +13,7 @@ from pydantic import BaseModel, Field
 from cellgroup.configs import SimulationConfig
 from cellgroup.synthetic.sample import Sample
 from cellgroup.synthetic.space import Space
-from cellgroup.synthetic.nucleus import Nucleus
-from cellgroup.synthetic.cluster import Cluster
 from cellgroup.synthetic.physics.update import UpdateCoordinator
-from cellgroup.synthetic.spatial.grid import SpatialGrid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,8 +34,8 @@ class SimulationEvent:
     """Represents significant events during simulation."""
     timestamp: float
     event_type: str
-    details: Dict[str, Any]
-    entities: List[int]  # IDs of involved entities
+    details: dict[str, Any]
+    entities: list[int]  # IDs of involved entities
 
     def __str__(self) -> str:
         return f"[{self.timestamp:.2f}] {self.event_type}: {len(self.entities)} entities"
@@ -205,7 +202,7 @@ class SimulationController(BaseModel):
             }
             self._manage_snapshots()
 
-    def _log_event(self, event_type: str, details: Dict[str, Any], entities: List[int]):
+    def _log_event(self, event_type: str, details: dict[str, Any], entities: list[int]):
         """Log a simulation event."""
         event = SimulationEvent(
             timestamp=self.current_time,
@@ -331,23 +328,23 @@ class SimulationController(BaseModel):
             logger.error(f"Cleanup error: {str(e)}")
             self._log_event('cleanup_error', {'error': str(e)}, [])
 
-    def get_statistics(self) -> Dict[str, List[float]]:
+    def get_statistics(self) -> dict[str, list[float]]:
         """Get current simulation statistics."""
         return self.statistics
 
-    def get_events(self, start_time: Optional[float] = None) -> List[SimulationEvent]:
+    def get_events(self, start_time: Optional[float] = None) -> list[SimulationEvent]:
         """Get events, optionally filtered by start time."""
         if start_time is None:
             return self.events
         return [e for e in self.events if e.timestamp >= start_time]
 
-    def get_snapshot(self, time: Optional[int] = None) -> Dict:
+    def get_snapshot(self, time: Optional[int] = None) -> dict:
         """Get simulation snapshot at specified time."""
         if time is None:
             time = int(self.current_time)
         return self.snapshots.get(time, {})
 
-    def get_performance_metrics(self) -> Dict[str, List[float]]:
+    def get_performance_metrics(self) -> dict[str, list[float]]:
         """Get performance metrics if monitoring is enabled."""
         if not self.config.performance_monitoring:
             return {}
@@ -376,7 +373,7 @@ class SimulationController(BaseModel):
                 return False
         return False
 
-    def get_state_summary(self) -> Dict[str, Any]:
+    def get_state_summary(self) -> dict[str, Any]:
         """Get a summary of current simulation state."""
         return {
             'state': self.state.name,
@@ -418,7 +415,7 @@ class SimulationController(BaseModel):
             logger.error(f"State validation error: {str(e)}")
             return False
 
-    def export_data(self, format: str = 'dict') -> Dict[str, Any]:
+    def export_data(self, format: str = 'dict') -> dict[str, Any]:
         """Export simulation data in specified format."""
         data = {
             'config': self.config.model_dump(),
