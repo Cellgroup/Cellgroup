@@ -1,6 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from cellgroup.synthetic import Space, Nucleus, Cluster, Sample, NucleusFluorophoreDistribution
+
+from cellgroup.synthetic.space import Space
+from cellgroup.synthetic.sample import Sample
+from cellgroup.synthetic.nucleus import Nucleus
+from cellgroup.synthetic.nucleus_fp_distribution import NucleusFluorophoreDistribution
+
 
 def run_basic_simulation():
     """Run a basic cell simulation and visualization."""
