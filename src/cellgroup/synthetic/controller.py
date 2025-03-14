@@ -21,6 +21,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# FC: I understand why the `SimulationState` can be a useful functionality to have,
+# but it is very difficult to maintain.
+# Remember that synthetic data generation is not the first and foremost goal of the project.
 class SimulationState(Enum):
     """Possible states of the simulation."""
     INITIALIZED = auto()
@@ -42,8 +45,11 @@ class SimulationEvent:
         return f"[{self.timestamp:.2f}] {self.event_type}: {len(self.entities)} entities"
 
 
-# FC: very good, but also quite complex. Maybe simplify a bit for maintainability?
-# FC: also, the class is quite long, maybe modularize it into smaller parts? 
+# FC: very good and complete, but also quite complex.
+# There are too many functionalities and moving parts that can hinder maintainability.
+# Also, the class is quite long, maybe modularize it into smaller parts?
+# Finally, the entire `try -> except` implementation makes it difficult to understand
+# the flow of the code.
 class SimulationController(BaseModel):
     """Controls and manages the cell simulation."""
     
@@ -60,9 +66,9 @@ class SimulationController(BaseModel):
 
     # Tracking and analysis
     events: list[SimulationEvent] = Field(default_factory=list)
-    snapshots: dict[int, dict] = Field(default_factory=dict)
-    statistics: dict[str, list[float]] = Field(default_factory=dict)
-    performance_metrics: dict[str, list[float]] = Field(default_factory=dict)
+    snapshots: dict[int, dict] = Field(default_factory=dict) # TODO: define a type (e.g., `TypedDict`)
+    statistics: dict[str, list[float]] = Field(default_factory=dict) # TODO: define a type (e.g., `TypedDict`)
+    performance_metrics: dict[str, list[float]] = Field(default_factory=dict) # TODO: define a type (e.g., `TypedDict`)
 
     def __init__(self, **data):
         """Initialize simulation components."""
@@ -288,6 +294,7 @@ class SimulationController(BaseModel):
             logger.error(f"Run error: {str(e)}")
             return False
 
+    # TODO: In which use case would you need to pause and resume a simulation?
     def pause(self):
         """Pause the simulation."""
         if self.state == SimulationState.RUNNING:
@@ -396,6 +403,7 @@ class SimulationController(BaseModel):
             } if self.config.performance_monitoring else {}
         }
 
+    # TODO: make this a model validator since we are using pydantic?
     def validate_state(self) -> bool:
         """Validate current simulation state."""
         try:
