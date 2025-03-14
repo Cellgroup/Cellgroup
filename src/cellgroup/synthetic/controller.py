@@ -1,3 +1,19 @@
+# GENERAL COMMENT
+# This implementation is undoubtedly very good and complete, the level of coding and use
+# of advanced tools is absolutely remarkable. However, I have some concerns about the fact
+# that it might make things a bit more complex than we need. For instance, I believe that
+# there are too many functionalities and moving parts that can hinder maintainability
+# and readability of the code. Additionally, the class is quite long, maybe modularizing
+# it into smaller parts can help.
+# On more practical terms, let me make some points:
+#   1. The entire `try -> except` implementation (sometimes) makes more difficult to understand
+#   the flow of the code.
+#   2. The `SimulationState` enum is a good plus, but we need to reason on the trade-off between
+#   the complexity it adds and the benefits it brings.
+#   3. All the simulation stats/metrics should be put in custom classes (`TypedDict`, `Dataclasses`,
+#   `Pydantic` if we ever need to validate something), as having dictionaries is extremely error-prone.
+
+
 from __future__ import annotations
 
 import logging
@@ -45,13 +61,12 @@ class SimulationEvent:
         return f"[{self.timestamp:.2f}] {self.event_type}: {len(self.entities)} entities"
 
 
-# FC: very good and complete, but also quite complex.
-# There are too many functionalities and moving parts that can hinder maintainability.
-# Also, the class is quite long, maybe modularize it into smaller parts?
-# Finally, the entire `try -> except` implementation makes it difficult to understand
-# the flow of the code.
+# TODO: do we need pydantic if we don't use the validation features?
 class SimulationController(BaseModel):
-    """Controls and manages the cell simulation."""
+    """Controls and manages the cell simulation.
+    
+    TODO: explain the logic + add example of usage
+    """
     
     model_config = ConfigDict(validate_default=True, arbitrary_types_allowed=True)
 
@@ -75,6 +90,9 @@ class SimulationController(BaseModel):
         super().__init__(**data)
         self._initialize_simulation()
 
+    # FC: very good use of context managers, but a bit of an overkill IMHO
+    # In other terms: does this give us a huge advantage over some simpler implementation?
+    # I am happy to hear your thoughts on this, maybe I am missing something.
     @contextmanager
     def _state_transition(self, new_state: SimulationState):
         """Safely manage state transitions."""
@@ -91,6 +109,7 @@ class SimulationController(BaseModel):
             self._log_event('state_transition_error', {'error': str(e)}, [])
             raise
 
+    # TODO: make this a separate type
     def _validate_state_transition(self, from_state: SimulationState, to_state: SimulationState) -> bool:
         """Validate state transitions."""
         valid_transitions = {
@@ -120,6 +139,7 @@ class SimulationController(BaseModel):
             )
 
             # Create initial sample with clusters
+            # TODO: give user the chance to pass a sample defined outside of this model
             # TODO: use more data from config
             self.sample = Sample.create_random_sample(
                 space=self.space,
@@ -226,7 +246,7 @@ class SimulationController(BaseModel):
         self.events.append(event)
         logger.debug(str(event))
 
-    def step(self) -> bool:
+    def step(self) -> bool: # TODO: why do we need to return a boolean?
         """Perform a single simulation step."""
         try:
             if self.state not in (SimulationState.INITIALIZED, SimulationState.RUNNING):
@@ -261,13 +281,13 @@ class SimulationController(BaseModel):
             logger.error(f"Step error at time {self.current_time}: {str(e)}")
             return False
 
-    def run(self, duration: Optional[int] = None) -> bool:
+    def run(self, duration: Optional[int] = None) -> bool: # TODO: why boolean?
         """Run simulation for specified duration."""
         steps = duration or (self.config.duration - int(self.current_time))
 
         try:
             for step in range(steps):
-                if not self.step():
+                if not self.step(): # not clean IMO
                     return False
 
                 if self.sample.count == 0:
@@ -295,6 +315,8 @@ class SimulationController(BaseModel):
             return False
 
     # TODO: In which use case would you need to pause and resume a simulation?
+    # And how would you call this from the API? (I guess you primarily use the `run` method,
+    # which internally calls `step`. This `pause` seems to me more at the `step` level.)
     def pause(self):
         """Pause the simulation."""
         if self.state == SimulationState.RUNNING:
@@ -305,6 +327,7 @@ class SimulationController(BaseModel):
                     []
                 )
 
+    # see `pause`
     def resume(self):
         """Resume the simulation."""
         if self.state == SimulationState.PAUSED:
@@ -315,6 +338,7 @@ class SimulationController(BaseModel):
                     []
                 )
 
+    # use case for this? let's discuss
     def reset(self):
         """Reset simulation to initial state."""
         with self._state_transition(SimulationState.INITIALIZED):
@@ -326,6 +350,7 @@ class SimulationController(BaseModel):
                 []
             )
 
+    # use case for this? let's discuss
     def cleanup(self):
         """Clean up resources when simulation ends."""
         try:
@@ -364,6 +389,9 @@ class SimulationController(BaseModel):
             return {}
         return self.performance_metrics
 
+    # FC: uh, maybe now I see why you used all the context manager above.
+    # Let's discuss this. I think this functionality has some potential.
+    # Anyway, can't you more easily just take the previous snapshot and restore it?
     def attempt_recovery(self) -> bool:
         """Attempt to recover from error state."""
         if self.state == SimulationState.ERROR:
@@ -387,6 +415,7 @@ class SimulationController(BaseModel):
                 return False
         return False
 
+    # TODO: make this a type
     def get_state_summary(self) -> dict[str, Any]:
         """Get a summary of current simulation state."""
         return {
