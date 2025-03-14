@@ -4,6 +4,7 @@ from typing_extensions import Self
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+# FIXME: come up with more consistent naming for config classes
 class SimulationConfig(BaseModel):
     """Configuration for simulation parameters."""
 
