@@ -1,6 +1,6 @@
 from typing import Optional
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from dataclasses import dataclass
 
 from cellgroup.synthetic.nucleus import Nucleus
@@ -12,10 +12,18 @@ EPSILON = 1e-10  # Small number for float comparisons
 MAX_SINGLE_DISPLACEMENT = 10.0  # Maximum displacement per iteration
 MIN_SEPARATION = 0.1  # Minimum separation to maintain between nuclei
 
-# GENERAL COMMENT
-# I disagree with the use of try except blocks in the methods,
-# it just hides the error and raises a new one with less information.
-# Makes it harder to debug. I would remove them.
+# GENERAL COMMENTS
+# - I kind of disagree with the use of try except blocks in the methods,
+#   it just hides the error and raises a new one with less information.
+#   Makes it harder to debug. I would remove them.
+# - I like the way you implemented the method (I need some more time and
+#   explanations to understand it better). However, I have a practical doubt:
+#   + You're solving an optimization problem iteratively (see line 310).
+#     Therefore, there's no guarantee that the solution will not present
+#     any overlaping nuclei.
+# - I would also implement a simpler bounding-box based method and let the
+#   user choose between the two methods. This would be useful for large
+#   simulations where speed is more important than accuracy.
 
 @dataclass # TODO: TypedDict (?)
 class CollisionPair:
@@ -37,6 +45,12 @@ class CollisionResolver(BaseModel):
     
     # TODO: explain a bit more the parameters and the methods
     """
+    
+    model_config = ConfigDict(
+        validate_assignment=True,
+        validate_default=True,
+        arbitrary_types_allowed = True
+    )
 
     space: Space
     max_iterations: int = Field(default=50, ge=1)
@@ -47,9 +61,6 @@ class CollisionResolver(BaseModel):
     # New parameters for enhanced stability
     max_displacement_per_step: float = Field(default=MAX_SINGLE_DISPLACEMENT, gt=0.0)
     min_separation: float = Field(default=MIN_SEPARATION, gt=0.0)
-
-    class Config:
-        arbitrary_types_allowed = True
 
     def _transform_to_unit_sphere(
         self,

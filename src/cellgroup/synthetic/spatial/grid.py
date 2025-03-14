@@ -1,7 +1,9 @@
-from typing import List, Set, Tuple, Dict, Optional, Iterator
 from dataclasses import dataclass
+from typing import Iterator
+from typing_extensions import Self
+
 import numpy as np
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 
 from cellgroup.synthetic.nucleus import Nucleus
 from cellgroup.synthetic.space import Space
@@ -20,9 +22,9 @@ class GridCell:
     nuclei : Set[int]
         Set of nucleus IDs contained in this cell
     """
-    indices: Tuple[int, ...]
-    bounds: Tuple[Tuple[float, float], ...]
-    nuclei: Set[int] = Field(default_factory=set)
+    indices: tuple[int, ...]
+    bounds: tuple[tuple[float, float], ...]
+    nuclei: set[int] = Field(default_factory=set)
 
     def add_nucleus(self, nucleus_id: int) -> None:
         """Add a nucleus to this cell."""
@@ -38,7 +40,7 @@ class GridCell:
         return len(self.nuclei) == 0
 
     @property
-    def center(self) -> Tuple[float, ...]:
+    def center(self) -> tuple[float, ...]:
         """Get cell center coordinates."""
         return tuple((b[0] + b[1]) / 2 for b in self.bounds)
 
@@ -62,26 +64,26 @@ class SpatialGrid(BaseModel):
 
     space: Space
     cell_size: float = Field(gt=0.0)
-    periodic: bool = False
-    grid_cells: Dict[Tuple[int, ...], GridCell] = Field(default_factory=dict)
-    nucleus_to_cells: Dict[int, Set[Tuple[int, ...]]] = Field(default_factory=dict)
+    periodic: bool = False # What is this? How it works?
+    
+    grid_cells: dict[tuple[int, ...], GridCell] = Field(default_factory=dict)
+    nucleus_to_cells: dict[int, set[tuple[int, ...]]] = Field(default_factory=dict)
 
     # Calculated properties
-    grid_dimensions: Tuple[int, ...] = Field(init=False)
+    # TODO; define as @property?
+    grid_dimensions: tuple[int, ...] = Field(init=False)
     max_nucleus_size: float = Field(default=0.0)  # Track largest nucleus for validation
 
-    @field_validator('cell_size')
-    def validate_cell_size(cls, v: float, values: Dict) -> float:
+    @model_validator(mode="after")
+    def validate_cell_size(self) -> Self:
         """Validate that cell size is appropriate for the space."""
-        if 'space' not in values:
-            return v
-
-        min_space_dim = min(values['space'].size)
-        if v > min_space_dim / 2:
+        min_space_dim = min(self.space.size)
+        if self.cell_size > min_space_dim / 2:
             raise ValueError(
-                f"Cell size ({v}) is too large for space dimensions {values['space'].size}"
+                "Cell size ({self.cell_size}) is too large for space dimensions "
+                f"{self.space.size}"
             )
-        return v
+        return self
 
     def __init__(self, **data):
         """Initialize the spatial grid."""
@@ -89,7 +91,7 @@ class SpatialGrid(BaseModel):
         self.grid_dimensions = self._calculate_grid_dimensions()
         self._initialize_grid()
 
-    def _calculate_grid_dimensions(self) -> Tuple[int, ...]:
+    def _calculate_grid_dimensions(self) -> tuple[int, ...]:
         """Calculate number of grid cells needed in each dimension."""
         return tuple(int(np.ceil(s / self.cell_size)) for s in self.space.size)
 
@@ -108,7 +110,7 @@ class SpatialGrid(BaseModel):
                 nuclei=set()
             )
 
-    def _validate_position(self, position: Tuple[float, ...]) -> None:
+    def _validate_position(self, position: tuple[float, ...]) -> None:
         """Check if a position is within space bounds."""
         if len(position) != len(self.space.size):
             raise ValueError(f"Position {position} has wrong dimensionality")
@@ -117,14 +119,14 @@ class SpatialGrid(BaseModel):
             if not self.periodic and (pos < 0 or pos >= size):
                 raise ValueError(f"Position {position} is outside space bounds")
 
-    def _apply_periodic_bounds(self, position: Tuple[float, ...]) -> Tuple[float, ...]:
+    def _apply_periodic_bounds(self, position: tuple[float, ...]) -> tuple[float, ...]:
         """Apply periodic boundary conditions to a position if enabled."""
         if not self.periodic:
             return position
 
         return tuple(pos % size for pos, size in zip(position, self.space.size))
 
-    def _get_cell_indices(self, position: Tuple[float, ...]) -> Tuple[int, ...]:
+    def _get_cell_indices(self, position: tuple[float, ...]) -> tuple[int, ...]:
         """Convert a position to grid cell indices."""
         position = self._apply_periodic_bounds(position)
         self._validate_position(position)
@@ -137,9 +139,9 @@ class SpatialGrid(BaseModel):
 
     def _get_neighbor_indices(
             self,
-            center_indices: Tuple[int, ...],
+            center_indices: tuple[int, ...],
             radius: int = 1
-    ) -> Iterator[Tuple[int, ...]]:
+    ) -> Iterator[tuple[int, ...]]:
         """Get indices of neighboring cells within given radius."""
         ranges = []
         for c, d in zip(center_indices, self.grid_dimensions):
@@ -166,8 +168,12 @@ class SpatialGrid(BaseModel):
                 )
             #TODO: this should not be here --> move to a nucleus. Make it do a check.
 
-    def _get_cells_for_nucleus(self, nucleus: Nucleus) -> Set[Tuple[int, ...]]:
+    def _get_cells_for_nucleus(self, nucleus: Nucleus) -> set[tuple[int, ...]]:
         """Get all grid cells that a nucleus overlaps with."""
+        # FC: isn't it easier to consider grid cells that are an order of magnitude larger than the nucleus
+        # to avoid the need to check for all cells that the nucleus overlaps with?
+        # I think it would simplify the code and make it more efficient.
+        # Or maybe I am missing something?
         self.update_max_nucleus_size(nucleus)
 
         # Get nucleus bounding box
@@ -247,7 +253,7 @@ class SpatialGrid(BaseModel):
         except ValueError as e:
             raise ValueError(f"Failed to update nucleus {nucleus.idx}: {e}")
 
-    def get_potential_collisions(self, nucleus: Nucleus) -> Set[int]:
+    def get_potential_collisions(self, nucleus: Nucleus) -> set[int]:
         """Get IDs of all nuclei that could potentially collide with given nucleus."""
         try:
             # Calculate search radius based on nucleus size
@@ -272,11 +278,10 @@ class SpatialGrid(BaseModel):
                 f"Failed to get potential collisions for nucleus {nucleus.idx}: {e}"
             )
 
+    # TODO: not used elsewhere. What is the use?
     def get_nuclei_in_radius(
-            self,
-            center: Tuple[float, ...],
-            radius: float
-    ) -> Set[int]:
+        self, center: tuple[float, ...], radius: float
+    ) -> set[int]:
         """Get IDs of all nuclei within given radius of a point."""
         try:
             # Get cell at center point
@@ -296,7 +301,7 @@ class SpatialGrid(BaseModel):
         except ValueError as e:
             raise ValueError(f"Failed to get nuclei in radius: {e}")
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         """Get statistics about grid occupancy."""
         stats = {
             'total_cells': len(self.grid_cells),

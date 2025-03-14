@@ -53,6 +53,10 @@ class UpdateCoordinator(BaseModel):
     """Coordinates the multi-phase update process for nuclei.
     
     TODO: add explanation for this class
+    - What is the purpose of this class?
+    - What are the main components?
+    - How does it work?
+    - At which point is it used in the simulation?
     """
 
     # Core parameters

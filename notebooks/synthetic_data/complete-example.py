@@ -6,6 +6,7 @@ from cellgroup.synthetic.sample import Sample
 from cellgroup.synthetic.nucleus import Nucleus
 from cellgroup.synthetic.nucleus_fp_distribution import NucleusFluorophoreDistribution
 
+# FC: why controller and update are not used here?
 
 def run_basic_simulation():
     """Run a basic cell simulation and visualization."""
