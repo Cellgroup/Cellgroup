@@ -10,6 +10,7 @@ class SimulationConfig(BaseModel):
     # Time-related parameters
     duration: int = Field(gt=0, description="Total simulation duration in timesteps")
     time_step: float = Field(gt=0.0, le=1.0, description="Time step size")
+    # TODO: not clear what the unit of measure of `duration` and `time_step` is
     save_frequency: int = Field(gt=0, description="Save state every N steps")
 
     # Space configuration

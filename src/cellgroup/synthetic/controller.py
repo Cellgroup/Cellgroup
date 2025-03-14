@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import logging
+import psutil
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, Optional
-import time
-import psutil
+
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from cellgroup.configs import SimulationConfig
 from cellgroup.synthetic.sample import Sample
@@ -41,8 +42,12 @@ class SimulationEvent:
         return f"[{self.timestamp:.2f}] {self.event_type}: {len(self.entities)} entities"
 
 
+# FC: very good, but also quite complex. Maybe simplify a bit for maintainability?
+# FC: also, the class is quite long, maybe modularize it into smaller parts? 
 class SimulationController(BaseModel):
     """Controls and manages the cell simulation."""
+    
+    model_config = ConfigDict(validate_default=True, arbitrary_types_allowed=True)
 
     config: SimulationConfig
     state: SimulationState = Field(default=SimulationState.INITIALIZED)
@@ -58,9 +63,6 @@ class SimulationController(BaseModel):
     snapshots: dict[int, dict] = Field(default_factory=dict)
     statistics: dict[str, list[float]] = Field(default_factory=dict)
     performance_metrics: dict[str, list[float]] = Field(default_factory=dict)
-
-    class Config:
-        arbitrary_types_allowed = True
 
     def __init__(self, **data):
         """Initialize simulation components."""
@@ -112,6 +114,7 @@ class SimulationController(BaseModel):
             )
 
             # Create initial sample with clusters
+            # TODO: use more data from config
             self.sample = Sample.create_random_sample(
                 space=self.space,
                 n_clusters=self.config.initial_clusters,
@@ -132,8 +135,11 @@ class SimulationController(BaseModel):
             logger.error(f"Simulation initialization failed: {str(e)}")
             raise RuntimeError(f"Simulation initialization failed: {str(e)}")
 
+    # FC: this method is a bit of a duplicate of the actual simulation objects, indeed
+    # `Sample`, `Cluster`, `Nucleus` and `Space` all have these stats.
     def _initialize_statistics(self):
         """Initialize statistical tracking."""
+        # TODO: make this a dataclass for serialization
         self.statistics = {
             'time': [],
             'total_nuclei': [],
@@ -147,6 +153,7 @@ class SimulationController(BaseModel):
 
     def _initialize_performance_metrics(self):
         """Initialize performance monitoring."""
+        # TODO: make this a dataclass for serialization
         if self.config.performance_monitoring:
             self.performance_metrics = {
                 'step_time': [],
