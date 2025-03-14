@@ -133,6 +133,7 @@ class SimulationController(BaseModel):
             )
 
             # Initialize update coordinator
+            # TODO: is this guy used anywhere else?
             self.update_coordinator = UpdateCoordinator(
                 space=self.space,
                 time_step=self.config.time_step

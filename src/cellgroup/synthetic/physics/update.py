@@ -1,6 +1,6 @@
-from typing import List, Dict, Set, Tuple, Optional, Union
+from typing import Optional, Union
 import numpy as np
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, model_validator
 from dataclasses import dataclass
 from enum import Enum, auto
 from collections import defaultdict
@@ -35,10 +35,10 @@ class UpdateResult:
     nucleus_id: int
     event_type: UpdateEvent
     priority: UpdatePriority
-    new_nuclei: List[Nucleus]
+    new_nuclei: list[Nucleus]
     success: bool
     message: str
-    details: Dict = Field(default_factory=dict)  # Additional event-specific information
+    details: dict = Field(default_factory=dict)  # Additional event-specific information
 
 
 class DensityState(Enum):
@@ -50,7 +50,10 @@ class DensityState(Enum):
 
 
 class UpdateCoordinator(BaseModel):
-    """Coordinates the multi-phase update process for nuclei."""
+    """Coordinates the multi-phase update process for nuclei.
+    
+    TODO: add explanation for this class
+    """
 
     # Core parameters
     space: Space
@@ -66,7 +69,7 @@ class UpdateCoordinator(BaseModel):
     max_time_step: float = Field(default=2.0, gt=0.0)
 
     # Density control
-    density_thresholds: Dict[DensityState, float] = Field(
+    density_thresholds: dict[DensityState, float] = Field(
         default_factory=lambda: {
             DensityState.SPARSE: 0.2,  # Up to 20% local occupancy
             DensityState.MODERATE: 0.5,  # Up to 50% local occupancy
@@ -80,11 +83,8 @@ class UpdateCoordinator(BaseModel):
     collision_resolver: Optional[CollisionResolver] = None
 
     # Tracking
-    update_history: Dict[int, List[UpdateResult]] = Field(default_factory=dict)
+    update_history: dict[int, list[UpdateResult]] = Field(default_factory=dict)
     current_time: float = 0.0
-
-    class Config:
-        arbitrary_types_allowed = True
 
     def __init__(self, **data):
         """Initialize the update coordinator."""
@@ -107,7 +107,7 @@ class UpdateCoordinator(BaseModel):
             collision_buffer=self.min_nucleus_separation
         )
 
-    def _assess_local_density(self, position: Tuple[float, ...], radius: float) -> DensityState:
+    def _assess_local_density(self, position: tuple[float, ...], radius: float) -> DensityState:
         """Assess the local density state around a position."""
         try:
             # Get nuclei in local region
@@ -134,10 +134,11 @@ class UpdateCoordinator(BaseModel):
             # Default to DENSE on error to be cautious
             return DensityState.DENSE
 
-    def _adjust_time_step(self,
-                          density_state: DensityState,
-                          previous_updates: List[UpdateResult]
-                          ) -> None:
+    def _adjust_time_step(
+        self,
+        density_state: DensityState,
+        previous_updates: list[UpdateResult]
+    ) -> None:
         """Adjust time step based on local density and update history."""
         if not self.adaptive_stepping:
             return
@@ -252,10 +253,10 @@ class UpdateCoordinator(BaseModel):
             )
 
     def _handle_dense_division(
-            self,
-            nucleus: Nucleus,
-            daughter_cells: Tuple[Nucleus, Nucleus],
-            density_state: DensityState
+        self,
+        nucleus: Nucleus,
+        daughter_cells: tuple[Nucleus, Nucleus],
+        density_state: DensityState
     ) -> UpdateResult:
         """Handle division in dense regions."""
         try:
@@ -292,9 +293,9 @@ class UpdateCoordinator(BaseModel):
             )
 
     def update_nuclei(
-            self,
-            nuclei: List[Nucleus]
-    ) -> Tuple[List[Nucleus], List[UpdateResult]]:
+        self,
+        nuclei: list[Nucleus]
+    ) -> tuple[list[Nucleus], list[UpdateResult]]:
         """Perform complete update cycle for all nuclei."""
         if not nuclei:
             return [], []
@@ -399,7 +400,7 @@ class UpdateCoordinator(BaseModel):
 
     def _handle_emergency_collision_resolution(
             self,
-            nuclei: List[Nucleus]
+            nuclei: list[Nucleus]
     ) -> UpdateResult:
         """Emergency collision resolution for persistent collisions."""
         try:
@@ -498,7 +499,8 @@ class UpdateCoordinator(BaseModel):
                 details={"error": str(e)}
             )
 
-    def get_update_statistics(self) -> Dict:
+    # TODO: create a type to handle statistics
+    def get_update_statistics(self) -> dict:
         """Get comprehensive statistics about updates."""
         stats = {
             'total_updates': sum(len(results) for results in self.update_history.values()),
