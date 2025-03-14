@@ -1,7 +1,7 @@
 from typing import List, Set, Tuple, Dict, Optional, Iterator
 from dataclasses import dataclass
 import numpy as np
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, field_validator
 
 from cellgroup.synthetic.nucleus import Nucleus
 from cellgroup.synthetic.space import Space
@@ -70,7 +70,7 @@ class SpatialGrid(BaseModel):
     grid_dimensions: Tuple[int, ...] = Field(init=False)
     max_nucleus_size: float = Field(default=0.0)  # Track largest nucleus for validation
 
-    @validator('cell_size')
+    @field_validator('cell_size')
     def validate_cell_size(cls, v: float, values: Dict) -> float:
         """Validate that cell size is appropriate for the space."""
         if 'space' not in values:
