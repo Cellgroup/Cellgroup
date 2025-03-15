@@ -1,2 +1,2 @@
-from .imaging_config import ImagingConfig
+from .imaging_config import MicroscopyConfig
 from .data_simulation_config import SimulationConfig

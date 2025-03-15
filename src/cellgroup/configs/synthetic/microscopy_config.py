@@ -5,12 +5,9 @@ from warnings import warn
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class ImagingConfig(BaseModel):
+class MicroscopyConfig(BaseModel):
     
     model_config = ConfigDict(validate_assignment=True, validate_default=True)
-    
-    data_dir: Union[str, Path]
-    """Path to the directory containing the data to use for the simulation."""
     
     save_dir: Union[str, Path]
     """Path to the directory where to save the simulated images."""

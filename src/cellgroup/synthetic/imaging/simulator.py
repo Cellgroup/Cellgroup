@@ -8,17 +8,17 @@ from microsim import schema as ms
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-from cellgroup.configs.synthetic import ImagingConfig
+from cellgroup.configs.synthetic import MicroscopyConfig
 from cellgroup.synthetic.imaging.utils import create_FP_distribution_from_array
 
 
 class MicroscopeSimulator:
     """Simulator for spectral data using `microsim`."""
     
-    def __init__(self, simulation_config: ImagingConfig):
+    def __init__(self, simulation_config: MicroscopyConfig):
         """Initialize the simulator with the given configuration."""
         
-        self.sim_config: ImagingConfig = simulation_config
+        self.sim_config: MicroscopyConfig = simulation_config
         self.optical_config: Sequence[ms.OpticalConfig] = self.get_optical_config()
 
     @property
@@ -300,27 +300,26 @@ class MicroscopeSimulator:
         return save_dirpath
 
 
-def simulate_spectral_data(simulation_config: ImagingConfig) -> tuple[str, str]:
+def simulate_spectral_data(
+    simulation_config: MicroscopyConfig, input_data: Sequence[NDArray]
+) -> None:
     """Simulate spectral data and save them on disk.
     
     Parameters
     ----------
     data_simulation_config : AnyDataSimulationConfig
         The configuration for the spectral data simulation.
-        
-    Returns
-    -------
-    tuple[str, str]
-        Paths to the simulated data and metadata.
+    input_data : Sequence[NDArray]
+        The input data to simulate images from. Each input is an array of
+        fluorophore distributions for the different channels.
+        Shape is (S, C, [Z], Y, X), where S is the number of samples.    
     """
     simulator = MicroscopeSimulator(simulation_config=simulation_config)
     simulator.simulate_dataset()
     print(f"Spectral data simulation done! PSNR: {simulator.PSNR.mean():.2f}")
-    # TODO: implement option to avoid saving the data + loading them later
+    
+    # save data & metadata
     save_path = simulator.save()
-
-    # return data & metadata paths
     metadata_path = os.path.join(
         save_path, "data_simulation_config.json"
     )
-    return save_path, metadata_path
