@@ -25,7 +25,7 @@ class MicroscopeSimulator:
         """
         self.micro_config: MicroscopyConfig = microscopy_config
         self.optical_config: Sequence[ms.OpticalConfig] = self.get_optical_config()
-    
+
     
     def get_optical_config(self) -> Sequence[ms.OpticalConfig]:
         """Create a list of optical configurations."""
@@ -66,7 +66,7 @@ class MicroscopeSimulator:
                     name=f"optical_config_{fp_name}",
                     lights=[laser],
                     filters=[exc_filter, em_filter],
-                    exposure_ms=self.micro_config.exposure_ms
+                    exposure_ms=self.micro_config.exposure_ms,
                 )
             )
         
@@ -227,36 +227,28 @@ class MicroscopeSimulator:
         Returns
         -------
         tuple[NDArray, NDArray, NDArray]
-            The unmixed optical, unmixed digital and images for the current samples as
+            The unmixed optical and digital images for the current samples as
             numpy arrays. In particular:
-            - unmixed optical: (S, F, [Z], Y, X) -> high-SNR unmixed image.
-            - unmixed digital: (S, F, [Z], Y, X) -> "real" noisy unmixed image.
-            - digital: (S, C, [Z], Y, X) -> mixed spectral image.
+            - optical per fluorophore: (F, [Z], Y, X) -> high-SNR unmixed image.
+            - digital: (C, [Z], Y, X) -> simulated microscopy image.
         """
         # --- simulate images ---
         em_rates = self._get_em_rates(sim)
-        opt_img_per_fluor = sim.optical_image_per_fluor(em_rates) # (S, C, F, Z, Y, X)
-        opt_img = opt_img_per_fluor.sum("f") # (S, C, Z, Y, X)
-        dig_img_per_fluor = sim.digital_image(
-            opt_img_per_fluor, exposure_ms=self.micro_config.exposure_ms
-        ) # (S, C, F, Z, Y, X)
-        digital_img = sim.digital_image(
-            opt_img, exposure_ms=self.micro_config.exposure_ms
-        ) # (S, C, Z, Y, X) 
+        opt_img_per_fluor = sim.optical_image_per_fluor(em_rates) # (C, F, Z, Y, X)
+        opt_img = opt_img_per_fluor.sum("f") # (C, Z, Y, X)
+        digital_img = sim.digital_image(opt_img) # (C, Z, Y, X)
         
         # --- postprocess images ---
         # sum over channels
         opt_img_per_fluor = opt_img_per_fluor.sum("c") # (S, F, [Z], Y, X)
-        dig_img_per_fluor = dig_img_per_fluor.sum("c") # (S, F, [Z], Y, X)
         # remove Z dimension, if singleton, convert to numpy
         opt_img_per_fluor = opt_img_per_fluor.squeeze("z", drop=True).values
-        dig_img_per_fluor = dig_img_per_fluor.squeeze("z", drop=True).values
         digital_img = digital_img.squeeze("z", drop=True).values
         # cast to uint
         opt_img_per_fluor = self._img_to_uint(opt_img_per_fluor)
         dig_img_per_fluor = self._img_to_uint(dig_img_per_fluor)
         digital_img = self._img_to_uint(digital_img)
-        return opt_img_per_fluor, dig_img_per_fluor, digital_img
+        return opt_img_per_fluor, digital_img
 
     
     def simulate_img(
@@ -364,7 +356,7 @@ def simulate_spectral_data(
     """
     simulator = MicroscopeSimulator(simulation_config=simulation_config)
     simulator.simulate_dataset()
-    print(f"Spectral data simulation done! PSNR: {simulator.PSNR.mean():.2f}")
+    # print(f"Spectral data simulation done! PSNR: {simulator.PSNR.mean():.2f}")
     
     # save data & metadata
     save_path = simulator.save()
