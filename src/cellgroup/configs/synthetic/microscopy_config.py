@@ -12,15 +12,6 @@ class MicroscopyConfig(BaseModel):
     save_dir: Union[str, Path]
     """Path to the directory where to save the simulated images."""
     
-    n_simulations: int = 100
-    """The number of images to simulate."""
-    
-    batch_size: int = 1
-    """The number of images to simulate at once."""
-    
-    fluorophores: Sequence[str]
-    """The fluorophores associated with the structures to simulate."""
-    
     space_shape: tuple[int, int, int] = (256, 256, 256)
     """The shape of the simulation space."""
     
@@ -30,14 +21,26 @@ class MicroscopyConfig(BaseModel):
     space_downscaling: Union[int, tuple[int, int, int]] = 1
     """The downscaling factor to apply to the simulation space."""
     
-    light_wavelengths: Sequence[int]
+    fluorophores: Sequence[str]
+    """The fluorophores associated with the structures to simulate."""
+    
+    laser_wavelengths: Sequence[int]
     """List of lasers to use for excitation."""
     
-    light_powers: Sequence[float]
+    laser_powers: Sequence[float]
     """List of powers associate to each light source (work as scaling factors)."""
     
-    wavelength_range: tuple[int, int] = (400, 700)
-    """The range of wavelengths of the acquired spectrum in nm."""
+    laser_filters_bandwidth: int = 5
+    """The bandwidth of the bandpass filter (in nm) used for the excitation lasers."""
+    
+    excitation_filters_bandwidth: int = 50
+    """The bandwidth of filters used at the excitation stage (i.e., wavelength ranges for
+    the excitation of each fluorophore)."""
+    # TODO: is it needed given that the excitation source is a laser?
+    
+    emission_filters_bandwidth: int = 50
+    """The bandwidth of filters used at the emission stage (i.e., wavelength ranges for
+    the acquisition of each multiplexed image)."""
     
     exposure_ms: float = 50
     """The exposure time for the detector cameras (in ms)."""
@@ -45,27 +48,25 @@ class MicroscopyConfig(BaseModel):
     detector_quantum_eff: float = Field(0.8, ge=0, le=1)
     """The quantum efficiency of the detector cameras."""
     
-    detector_bandpass_bandwidth: float = 5
-    """The bandwidth of the bandpass filter in nm used in the spectral detector."""
-    
     read_noise: float = 6
     """The read noise of the detector cameras in electrons."""
     
     bit_depth: Literal[8, 16, 32] = 16
     """The bit depth of the acquired images."""
     
-    # TODO: set excitation lights to excitation peaks of the fluorophores (complicated ...)
+    # TODO: set excitation lights to excitation peaks of the fluorophores if not provided
+
     
     @model_validator(mode="after")
-    def _validate_labels_fluorophores(self):
-        if len(self.fluorophores) != len(self.labels):
-            raise ValueError("The number of labels and fluorophores must be the same.")
+    def _validate_lasers(self):
+        if len(self.laser_wavelengths) != len(self.laser_powers):
+            raise ValueError("The number of light sources and light powers must be the same.")
         return self
     
     @model_validator(mode="after")
-    def _validate_light_sources(self):
-        if len(self.light_wavelengths) != len(self.light_powers):
-            raise ValueError("The number of light sources and light powers must be the same.")
+    def _validate_fluorophores_and_lasers(self):
+        if len(self.fluorophores) != len(self.laser_wavelengths):
+            raise ValueError("The number of labels and fluorophores must be the same.")
         return self
     
     @model_validator(mode="after")
