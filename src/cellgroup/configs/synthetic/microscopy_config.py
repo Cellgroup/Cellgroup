@@ -43,6 +43,9 @@ class MicroscopyConfig(BaseModel):
     used for all fluorophores, otherwise, a list of values for each fluorophore must
     be provided."""
     
+    pinhole_au: float = 1.0
+    """The pinhole size in Airy units."""
+    
     exposure_ms: float = 50
     """The exposure time for the detector cameras (in ms)."""
     

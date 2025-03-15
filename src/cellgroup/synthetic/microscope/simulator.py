@@ -9,7 +9,10 @@ from numpy.typing import NDArray
 from tqdm import tqdm
 
 from cellgroup.configs.synthetic import MicroscopyConfig
-from cellgroup.synthetic.imaging.utils import create_FP_distribution_from_array
+from cellgroup.synthetic.microscope.utils import create_FP_distribution_from_array
+from cellgroup.synthetic.microscope.io import (
+    get_save_dirpath, save_simulation_metadata, save_simulation_results
+)
 
 
 class MicroscopeSimulator:
@@ -202,7 +205,7 @@ class MicroscopeSimulator:
             output_space={"downscale": self.micro_config.space_downscaling},
             samples=samples,
             channels=self.optical_config,
-            modality=ms.Identity(),
+            modality=ms.Confocal(pinhole_au=self.micro_config.pinhole_au),
             settings=ms.Settings(
                 cache=custom_cache_settings,
                 random_seed=seed,
@@ -315,17 +318,15 @@ class MicroscopeSimulator:
         str
             The path to the saved images.
         """
-        raise NotImplementedError("Saving images not yet implemented.")
         # set sim_info dict for save_dir naming
+        # TODO: add info to create file names for simulation
         sim_info = {
-            "labels": self.micro_config.labels,
-            "n_simulations": self.micro_config.n_simulations,
             "exposure": self.micro_config.exposure_ms,
             "read_noise": self.micro_config.read_noise,
         }
         
         # create unique save directory
-        save_dirpath = get_save_dirpath(self.data_sim_config.save_dir, sim_info)
+        save_dirpath = get_save_dirpath(self.micro_config.save_dir, sim_info)
         print(f"Saving images into {save_dirpath}...")
         os.makedirs(save_dirpath, exist_ok=True)
         
@@ -335,7 +336,7 @@ class MicroscopeSimulator:
         )
         
         # save metadata
-        save_simulation_metadata(metadata=self.data_sim_config, save_dir=save_dirpath)
+        save_simulation_metadata(metadata=self.micro_config, save_dir=save_dirpath)
         
         return save_dirpath
 
