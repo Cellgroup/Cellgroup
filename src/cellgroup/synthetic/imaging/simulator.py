@@ -15,24 +15,30 @@ from cellgroup.synthetic.imaging.utils import create_FP_distribution_from_array
 class MicroscopeSimulator:
     """Simulator for spectral data using `microsim`."""
     
-    def __init__(self, simulation_config: MicroscopyConfig):
-        """Initialize the simulator with the given configuration."""
+    def __init__(self, microscopy_config: MicroscopyConfig):
+        """Initialize the simulator with the given configuration.
         
-        self.sim_config: MicroscopyConfig = simulation_config
+        Parameters
+        ----------
+        microscopy_config : MicroscopyConfig
+            The configuration for the microscopy simulation.
+        """
+        self.micro_config: MicroscopyConfig = microscopy_config
         self.optical_config: Sequence[ms.OpticalConfig] = self.get_optical_config()
-
+    
+    
     def get_optical_config(self) -> Sequence[ms.OpticalConfig]:
         """Create a list of optical configurations."""
         optical_configs: list[ms.OpticalConfig] = []
-        for i, fp_name in enumerate(self.sim_config.fluorophores):
+        for i, fp_name in enumerate(self.micro_config.fluorophores):
             # get max excitation/emission wavelengths to define filters/lasers
             fp = ms.Fluorophore.from_fpbase(fp_name)
-            if self.sim_config.laser_wavelengths is None:
+            if self.micro_config.laser_wavelengths is None:
                 excitation_wv = fp.excitation_spectrum.intensity[
                     fp.excitation_spectrum.intensity.argmax()
                 ]
             else:
-                excitation_wv = self.sim_config.laser_wavelengths[i]
+                excitation_wv = self.micro_config.laser_wavelengths[i]
             max_emission_wv = fp.emission_spectrum.intensity[
                 fp.emission_spectrum.intensity.argmax()
             ]
@@ -40,19 +46,19 @@ class MicroscopeSimulator:
             # create laser source
             laser = ms.optical_config.LightSource.laser(
                 wavelength=excitation_wv,
-                power=self.sim_config.laser_powers[i],
+                power=self.micro_config.laser_powers[i],
             )
             
             # create filters
             exc_filter = ms.optical_config.filter.Bandpass(
                 placement="EX",
                 bandcenter=excitation_wv,
-                bandwidth=self.sim_config.laser_filters_bandwidth,
+                bandwidth=self.micro_config.laser_filters_bandwidth,
             )
             em_filter = ms.optical_config.filter.Bandpass(
                 placement="EM",
                 bandcenter=max_emission_wv,
-                bandwidth=self.sim_config.emission_filters_bandwidth[i],
+                bandwidth=self.micro_config.emission_filters_bandwidth[i],
             )
         
             optical_configs.append(
@@ -60,7 +66,7 @@ class MicroscopeSimulator:
                     name=f"optical_config_{fp_name}",
                     lights=[laser],
                     filters=[exc_filter, em_filter],
-                    exposure_ms=self.sim_config.exposure_ms
+                    exposure_ms=self.micro_config.exposure_ms
                 )
             )
         
@@ -125,7 +131,7 @@ class MicroscopeSimulator:
         NDArray
             Casted mage with intensities restricted to the given bit range.
         """
-        bit_depth = self.sim_config.bit_depth
+        bit_depth = self.micro_config.bit_depth
         if bit_depth == 8:
             return np.clip(img, 0, 2**8 - 1).astype(np.uint8)
         elif bit_depth == 16:
@@ -150,7 +156,7 @@ class MicroscopeSimulator:
         ms.Sample
             The sample object for the given distributions and fluorophores.
         """
-        assert len(self.sim_config.fluorophores) == len(inputs), (
+        assert len(self.micro_config.fluorophores) == len(inputs), (
             "The number of inputs and fluorophores must be the same."
         )
         
@@ -159,7 +165,7 @@ class MicroscopeSimulator:
             labels=[
                 create_FP_distribution_from_array(fluorophore, array)
                 for array, fluorophore in zip(
-                    inputs, self.sim_config.fluorophores
+                    inputs, self.micro_config.fluorophores
                 )
             ]
         )
@@ -190,10 +196,10 @@ class MicroscopeSimulator:
         # --- initialize `Simulation` instance ---
         return ms.Simulation(
             truth_space=ms.ShapeScaleSpace(
-                shape=self.sim_config.space_shape,
-                scale=self.sim_config.space_scale,
+                shape=self.micro_config.space_shape,
+                scale=self.micro_config.space_scale,
             ),
-            output_space={"downscale": self.sim_config.space_downscaling},
+            output_space={"downscale": self.micro_config.space_downscaling},
             samples=samples,
             channels=self.optical_config,
             modality=ms.Identity(),
@@ -203,9 +209,9 @@ class MicroscopeSimulator:
                 spectral_bins_per_emission_channel=1,
             ),
             detector=ms.CameraCCD(
-                qe=self.sim_config.detector_quantum_eff, 
-                read_noise=self.sim_config.read_noise, 
-                bit_depth=self.sim_config.bit_depth
+                qe=self.micro_config.detector_quantum_eff, 
+                read_noise=self.micro_config.read_noise, 
+                bit_depth=self.micro_config.bit_depth
             ),
         )
 
@@ -232,10 +238,10 @@ class MicroscopeSimulator:
         opt_img_per_fluor = sim.optical_image_per_fluor(em_rates) # (S, C, F, Z, Y, X)
         opt_img = opt_img_per_fluor.sum("f") # (S, C, Z, Y, X)
         dig_img_per_fluor = sim.digital_image(
-            opt_img_per_fluor, exposure_ms=self.sim_config.exposure_ms
+            opt_img_per_fluor, exposure_ms=self.micro_config.exposure_ms
         ) # (S, C, F, Z, Y, X)
         digital_img = sim.digital_image(
-            opt_img, exposure_ms=self.sim_config.exposure_ms
+            opt_img, exposure_ms=self.micro_config.exposure_ms
         ) # (S, C, Z, Y, X) 
         
         # --- postprocess images ---
@@ -299,7 +305,7 @@ class MicroscopeSimulator:
             The simulated images for the given input data. Shape is (S, C, [Z], Y, X).
         """
         self.sim_imgs: list[NDArray] = []
-        curr_seed = self.sim_config.random_seed
+        curr_seed = self.micro_config.random_seed
         for input_ in tqdm(input_data, desc="Simulating images"):
             self.sim_imgs.extend(
                 self.simulate_img(input_, seed=curr_seed)
@@ -320,10 +326,10 @@ class MicroscopeSimulator:
         raise NotImplementedError("Saving images not yet implemented.")
         # set sim_info dict for save_dir naming
         sim_info = {
-            "labels": self.sim_config.labels,
-            "n_simulations": self.sim_config.n_simulations,
-            "exposure": self.sim_config.exposure_ms,
-            "read_noise": self.sim_config.read_noise,
+            "labels": self.micro_config.labels,
+            "n_simulations": self.micro_config.n_simulations,
+            "exposure": self.micro_config.exposure_ms,
+            "read_noise": self.micro_config.read_noise,
         }
         
         # create unique save directory
