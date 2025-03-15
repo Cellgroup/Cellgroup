@@ -1,7 +1,5 @@
 import os
-from dataclasses import dataclass
 from functools import cached_property
-from pathlib import Path
 from typing import Optional, Sequence, Union
 
 import numpy as np
@@ -13,26 +11,22 @@ from tqdm import tqdm
 from cellgroup.configs.synthetic import ImagingConfig
 from cellgroup.synthetic.imaging.utils import create_FP_distribution_from_array
 
-# NOTE: there are 2 different cases:
-# 1. Simulation data come from uncorrelated channels (i.e., each channel comes from a
-# different file/image). This is the case for the BioSR dataset.
-# 2. Simulation data come from correlated channels (i.e., all channels come from the same
-# file/image). This is the case for the Lung-Tonsile dataset.
 
-
-@dataclass
 class MicroscopeSimulator:
     """Simulator for spectral data using `microsim`."""
     
-    sim_config: ImagingConfig 
+    def __init__(self, simulation_config: ImagingConfig):
+        """Initialize the simulator with the given configuration."""
+        
+        self.sim_config: ImagingConfig = simulation_config
+        self.optical_config: Sequence[ms.OpticalConfig] = self.get_optical_config()
 
-    @cached_property
+    @property
     def optical_config(self) -> Sequence[ms.OpticalConfig]:
         """Create a list of optical configurations."""
         pass
         
-        
-    @cached_property
+    @property
     def PSNR(self) -> NDArray:
         """Compute the average channel-wise PSNR over the simulated unmixed images.
         
@@ -90,7 +84,7 @@ class MicroscopeSimulator:
         NDArray
             Casted mage with intensities restricted to the given bit range.
         """
-        bit_depth = self.data_sim_config.bit_depth
+        bit_depth = self.sim_config.bit_depth
         if bit_depth == 8:
             return np.clip(img, 0, 2**8 - 1).astype(np.uint8)
         elif bit_depth == 16:
@@ -98,105 +92,36 @@ class MicroscopeSimulator:
         elif bit_depth == 32:
             return np.clip(img, 0, 2**32 - 1).astype(np.uint32)
 
-    
-    def _get_input_data(
-        self, filepaths: Union[list[Union[str, Path]], list[list[Union[str, Path]]]], seed: Optional[int] = None
-    ) -> list[Union[NDArray, list[Union[str, Path]]]]:
-        """Get the input data for creating a `Sample` instance.
-        
-        Parameters
-        ----------
-        filepaths : Union[list[Union[str, Path]], list[list[Union[str, Path]]]]
-            The list of file paths for the current simulation. If the channels are
-            uncorrelated, then `filepaths` is a list of lists where each inner list
-            contains the file paths for a specific label. Otherwise, `filepaths` is a
-            list of file paths, each one referring to a multi-channel image.
-        seed : Optional[int]
-            The random seed for the simulation reproducibility (i.e., chosing the same
-            filepaths over different simulations). If `None`, filepaths are chosen
-            randomly without guaranteeing reproducibility for future experiments.
-        
-        Returns
-        -------
-        list[Union[NDArray, list[Union[str, Path]]]]
-            The input data for creating a `Sample` instance. If the channels are
-            uncorrelated, then the input is a list of file paths. Otherwise, the input
-            is a list of arrays, one for each channel.
-        """
-        # set seed for reproducibility (if provided)
-        if seed is not None:
-            np.random.seed(seed)
-        
-        # get input data
-        if isinstance(filepaths[0], list): # uncorrelated channels
-            # --- randomly sample files ---
-            inputs: list[Union[str, Path]] = []
-            for _ in range(self.data_sim_config.batch_size):
-                # sample one file per label
-                inputs.append([
-                    fpaths_per_label[np.random.randint(len(fpaths_per_label))]
-                    for fpaths_per_label in filepaths
-                ])
-            # TODO: also implement deterministic sampling
-        else: # correlated channels
-            # --- read the file, return array ---
-            raise NotImplementedError("Correlated channels not yet implemented.")
-            inputs = self.data_sim_config.imreader(filepaths)
-        
-        return inputs
 
-
-    def create_sample(self, inputs: Sequence[Union[NDArray, Union[str, Path]]]) -> ms.Sample:
-        """Create a sample from a list of labels and fluorophores.
+    def create_sample(self, inputs: Sequence[NDArray]) -> ms.Sample:
+        """Create a sample from a list of input arrays and fluorophores.
         
         Parameters
         ----------
         inputs : Sequence[Union[NDArray, Union[str, Path]]]
             The inputs to create the sample, i.e., sequences of fluorophore
-            distributions for the different labels. They can either come as a list of
-            file paths to load (in case of uncorrelated channels) or as a sequence of
-            arrays, one for each channel (in case of correlated channels).
+            distributions for the different labels. They come as a sequence
+            of arrays, one for each channel. Shape: (C, [Z], Y, X), where is
+            the number of channels.
         
         Returns
         -------
         ms.Sample
             The sample object for the given distributions and fluorophores.
         """
-        assert len(self.data_sim_config.fluorophores) == len(inputs), (
+        assert len(self.sim_config.fluorophores) == len(inputs), (
             "The number of inputs and fluorophores must be the same."
         )
         
-        if self.data_sim_config.uncorrelated_channels:
-            assert self.data_sim_config.imreader is not None, (
-                "When channels are uncorrelated, an image reader function must be provided."
-            )
-            assert all(isinstance(inp, (str, Path)) for inp in inputs), (
-                "When channels are uncorrelated, the inputs must be file paths."
-            )
-            # load each fp distribution from a different file
-            return ms.Sample(
-                labels=[
-                    create_FP_distribution_from_file(
-                        fluorophore, fpath, self.data_sim_config.imreader
-                    )
-                    for fpath, fluorophore in zip(
-                        inputs, self.data_sim_config.fluorophores
-                    )
-                ]
-            )
-        else:
-            assert all(isinstance(inp, NDArray) for inp in inputs), (
-                "When channels are correlated, the inputs must be arrays."
-            )
-            # load each fp distribution from a different array channel
-            return ms.Sample(
-                labels=[
-                    create_FP_distribution_from_array(fluorophore, array)
-                    for array, fluorophore in zip(
-                        inputs, self.data_sim_config.fluorophores
-                    )
-                ]
-            )
+        # load each fp distribution from a different array channel
+        return ms.Sample(
+            labels=[
+                create_FP_distribution_from_array(fluorophore, array)
+                for array, fluorophore in zip(
+                    inputs, self.sim_config.fluorophores
+                )
+            ]
+        )
 
 
     def init(self, samples: list[ms.Sample], seed: int) -> ms.Simulation:
@@ -224,10 +149,10 @@ class MicroscopeSimulator:
         # --- initialize `Simulation` instance ---
         return ms.Simulation(
             truth_space=ms.ShapeScaleSpace(
-                shape=self.data_sim_config.space_shape,
-                scale=self.data_sim_config.space_scale,
+                shape=self.sim_config.space_shape,
+                scale=self.sim_config.space_scale,
             ),
-            output_space={"downscale": self.data_sim_config.space_downscaling},
+            output_space={"downscale": self.sim_config.space_downscaling},
             samples=samples,
             channels=self.optical_config,
             modality=ms.Identity(),
@@ -237,9 +162,9 @@ class MicroscopeSimulator:
                 spectral_bins_per_emission_channel=1,
             ),
             detector=ms.CameraCCD(
-                qe=self.data_sim_config.detector_quantum_eff, 
-                read_noise=self.data_sim_config.read_noise, 
-                bit_depth=self.data_sim_config.bit_depth
+                qe=self.sim_config.detector_quantum_eff, 
+                read_noise=self.sim_config.read_noise, 
+                bit_depth=self.sim_config.bit_depth
             ),
         )
 
@@ -266,10 +191,10 @@ class MicroscopeSimulator:
         opt_img_per_fluor = sim.optical_image_per_fluor(em_rates) # (S, C, F, Z, Y, X)
         opt_img = opt_img_per_fluor.sum("f") # (S, C, Z, Y, X)
         dig_img_per_fluor = sim.digital_image(
-            opt_img_per_fluor, exposure_ms=self.data_sim_config.exposure_ms
+            opt_img_per_fluor, exposure_ms=self.sim_config.exposure_ms
         ) # (S, C, F, Z, Y, X)
         digital_img = sim.digital_image(
-            opt_img, exposure_ms=self.data_sim_config.exposure_ms
+            opt_img, exposure_ms=self.sim_config.exposure_ms
         ) # (S, C, Z, Y, X) 
         
         # --- postprocess images ---
@@ -287,79 +212,56 @@ class MicroscopeSimulator:
         return opt_img_per_fluor, dig_img_per_fluor, digital_img
 
     
-    def simulate_imgs(
-        self, 
-        filepaths: Union[list[Union[str, Path]], list[list[Union[str, Path]]]],
-        seed: int
+    def simulate_img(
+        self, input_: NDArray, seed: int = 123
     ) -> list[dict[str, NDArray]]:
-        """Simulate one set of images (unmixed high-SNR & real + spectral mixed) given
-        a batch of file paths.
+        """Simulate one images (unmixed high-SNR & real + spectral mixed) given one
+        input array of fluorophore distributions.
         
         Parameters
         ----------
-        filepaths : Union[list[Union[str, Path]], list[list[Union[str, Path]]]]
-            The list of file paths for the current simulation. If the channels are
-            uncorrelated, then `filepaths` is a list of lists where each inner list
-            contains the file paths for a specific label. Otherwise, `filepaths` is a
-            list of file paths, each one referring to a multi-channel image.
+        input : Sequence[NDArray]
+            The input array for the simulation, containing the different fluorophore
+            distributions in the different channels. Shape is (C, [Z], Y, X).
         seed : int
-            The random seed for the simulation reproducibility.
+            The random seed for the simulation reproducibility. Default is 123.
         
         Returns
         -------
-        list[dict[str, NDArray]]
-            A list of dictionaries containing the following keys:
-            - "GT": the ground truth image (high-SNR unmixed).
-            - "unmixed": the unmixed digital image (real noisy unmixed).
-            - "spectral": the spectral mixed image.
+        NDArray
+            The simulated microscope image resulting from the given input.
+            Shape is (C, [Z], Y, X).
         """
-        # --- get inputs for creating the sample ---
-        input_data = self._get_input_data(filepaths, seed)
-        
         # --- create sample ---
-        samples = [self.create_sample(input_) for input_ in input_data]
+        sample = self.create_sample(input_)
         
         # --- initialize simulation ---
-        simulation = self.init(samples, seed)
+        simulation = self.init(sample, seed)
         
         # --- run simulation ---
-        opt_img_per_fp, dig_img_per_fp, dig_img = self.run(simulation)
-        
-        return [
-            {
-                "GT": oipf, 
-                "unmixed": dipf, 
-                "spectral": di
-            }
-            for oipf, dipf, di in zip(opt_img_per_fp, dig_img_per_fp, dig_img)
-        ]
+        return self.run(simulation)
 
 
-    def simulate_dataset(self) -> list[dict[str, NDArray]]:
+    def simulate_dataset(self, input_data: Sequence[NDArray]) -> NDArray:
         """Simulate a dataset of spectral images for the current configuration.
+        
+        Parameters
+        ----------
+        input_data : Sequence[NDArray]
+            The input data to simulate images from. Each input is an array of
+            fluorophore distributions for the different channels.
+            Shape is (S, C, [Z], Y, X), where S is the number of samples.
         
         Returns
         -------
-        list[dict[str, NDArray]]
-            A list of dictionaries containing the following keys:
-            - "GT": the ground truth image (high-SNR unmixed).
-            - "unmixed": the unmixed digital image (real noisy unmixed).
-            - "spectral": the spectral mixed image.
+        NDArray
+            The simulated images for the given input data. Shape is (S, C, [Z], Y, X).
         """
-        # --- get file paths for the current dataset ---
-        filepaths = get_filepaths(
-            dataset_name=self.data_sim_config.dataset_name,
-            data_dir=self.data_sim_config.data_dir,
-            labels=self.data_sim_config.labels,
-            uncorrelated_ch=self.data_sim_config.uncorrelated_channels,
-        )
-        
-        self.sim_imgs = []
-        curr_seed = self.data_sim_config.random_seed
-        n_iters = self.data_sim_config.n_simulations // self.data_sim_config.batch_size
-        for _ in tqdm(range(n_iters), desc="Simulating images"):
+        self.sim_imgs: list[NDArray] = []
+        curr_seed = self.sim_config.random_seed
+        for input_ in tqdm(input_data, desc="Simulating images"):
             self.sim_imgs.extend(
-                self.simulate_imgs(filepaths=filepaths, seed=curr_seed)
+                self.simulate_img(input_, seed=curr_seed)
             )
             curr_seed += 1
 
@@ -376,10 +278,10 @@ class MicroscopeSimulator:
         """
         # set sim_info dict for save_dir naming
         sim_info = {
-            "labels": self.data_sim_config.labels,
-            "n_simulations": self.data_sim_config.n_simulations,
-            "exposure": self.data_sim_config.exposure_ms,
-            "read_noise": self.data_sim_config.read_noise,
+            "labels": self.sim_config.labels,
+            "n_simulations": self.sim_config.n_simulations,
+            "exposure": self.sim_config.exposure_ms,
+            "read_noise": self.sim_config.read_noise,
         }
         
         # create unique save directory
@@ -398,9 +300,7 @@ class MicroscopeSimulator:
         return save_dirpath
 
 
-def simulate_spectral_data(
-    data_simulation_config: "AnyDataSimulationConfig"
-) -> tuple[str, str]:
+def simulate_spectral_data(simulation_config: ImagingConfig) -> tuple[str, str]:
     """Simulate spectral data and save them on disk.
     
     Parameters
@@ -413,9 +313,7 @@ def simulate_spectral_data(
     tuple[str, str]
         Paths to the simulated data and metadata.
     """
-    simulator = SpectralDataSimulator(
-        data_sim_config=data_simulation_config
-    )
+    simulator = MicroscopeSimulator(simulation_config=simulation_config)
     simulator.simulate_dataset()
     print(f"Spectral data simulation done! PSNR: {simulator.PSNR.mean():.2f}")
     # TODO: implement option to avoid saving the data + loading them later
