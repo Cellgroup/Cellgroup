@@ -21,11 +21,52 @@ class MicroscopeSimulator:
         self.sim_config: MicroscopyConfig = simulation_config
         self.optical_config: Sequence[ms.OpticalConfig] = self.get_optical_config()
 
-    @property
-    def optical_config(self) -> Sequence[ms.OpticalConfig]:
+    def get_optical_config(self) -> Sequence[ms.OpticalConfig]:
         """Create a list of optical configurations."""
-        pass
+        optical_configs: list[ms.OpticalConfig] = []
+        for i, fp_name in enumerate(self.sim_config.fluorophores):
+            # get max excitation/emission wavelengths to define filters/lasers
+            fp = ms.Fluorophore.from_fpbase(fp_name)
+            if self.sim_config.laser_wavelengths is None:
+                excitation_wv = fp.excitation_spectrum.intensity[
+                    fp.excitation_spectrum.intensity.argmax()
+                ]
+            else:
+                excitation_wv = self.sim_config.laser_wavelengths[i]
+            max_emission_wv = fp.emission_spectrum.intensity[
+                fp.emission_spectrum.intensity.argmax()
+            ]
+            
+            # create laser source
+            laser = ms.optical_config.LightSource.laser(
+                wavelength=excitation_wv,
+                power=self.sim_config.laser_powers[i],
+            )
+            
+            # create filters
+            exc_filter = ms.optical_config.filter.Bandpass(
+                placement="EX",
+                bandcenter=excitation_wv,
+                bandwidth=self.sim_config.laser_filters_bandwidth,
+            )
+            em_filter = ms.optical_config.filter.Bandpass(
+                placement="EM",
+                bandcenter=max_emission_wv,
+                bandwidth=self.sim_config.emission_filters_bandwidth[i],
+            )
         
+            optical_configs.append(
+                ms.OpticalConfig(
+                    name=f"optical_config_{fp_name}",
+                    lights=[laser],
+                    filters=[exc_filter, em_filter],
+                    exposure_ms=self.sim_config.exposure_ms
+                )
+            )
+        
+        return optical_configs
+    
+    
     @property
     def PSNR(self) -> NDArray:
         """Compute the average channel-wise PSNR over the simulated unmixed images.
@@ -276,6 +317,7 @@ class MicroscopeSimulator:
         str
             The path to the saved images.
         """
+        raise NotImplementedError("Saving images not yet implemented.")
         # set sim_info dict for save_dir naming
         sim_info = {
             "labels": self.sim_config.labels,
