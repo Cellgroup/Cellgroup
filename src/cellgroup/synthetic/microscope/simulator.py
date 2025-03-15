@@ -1,6 +1,5 @@
 import os
-from functools import cached_property
-from typing import Optional, Sequence, Union
+from typing import Sequence
 
 import numpy as np
 import xarray as xr
