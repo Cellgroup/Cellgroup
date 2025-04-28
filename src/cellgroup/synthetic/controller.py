@@ -1,28 +1,45 @@
+# GENERAL COMMENT
+# This implementation is undoubtedly very good and complete, the level of coding and use
+# of advanced tools is absolutely remarkable. However, I have some concerns about the fact
+# that it might make things a bit more complex than we need. For instance, I believe that
+# there are too many functionalities and moving parts that can hinder maintainability
+# and readability of the code. Additionally, the class is quite long, maybe modularizing
+# it into smaller parts can help.
+# On more practical terms, let me make some points:
+#   1. The entire `try -> except` implementation (sometimes) makes more difficult to understand
+#   the flow of the code.
+#   2. The `SimulationState` enum is a good plus, but we need to reason on the trade-off between
+#   the complexity it adds and the benefits it brings.
+#   3. All the simulation stats/metrics should be put in custom classes (`TypedDict`, `Dataclasses`,
+#   `Pydantic` if we ever need to validate something), as having dictionaries is extremely error-prone.
+
+
 from __future__ import annotations
 
 import logging
+import psutil
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, List, Optional, Any, Tuple
-import time
-import psutil
+from typing import Any, Optional
+
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from cellgroup.configs import SimulationConfig
 from cellgroup.synthetic.sample import Sample
 from cellgroup.synthetic.space import Space
-from cellgroup.synthetic.nucleus import Nucleus
-from cellgroup.synthetic.cluster import Cluster
 from cellgroup.synthetic.physics.update import UpdateCoordinator
-from cellgroup.synthetic.spatial.grid import SpatialGrid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# FC: I understand why the `SimulationState` can be a useful functionality to have,
+# but it is very difficult to maintain.
+# Remember that synthetic data generation is not the first and foremost goal of the project.
 class SimulationState(Enum):
     """Possible states of the simulation."""
     INITIALIZED = auto()
@@ -37,15 +54,21 @@ class SimulationEvent:
     """Represents significant events during simulation."""
     timestamp: float
     event_type: str
-    details: Dict[str, Any]
-    entities: List[int]  # IDs of involved entities
+    details: dict[str, Any]
+    entities: list[int]  # IDs of involved entities
 
     def __str__(self) -> str:
         return f"[{self.timestamp:.2f}] {self.event_type}: {len(self.entities)} entities"
 
 
+# TODO: do we need pydantic if we don't use the validation features?
 class SimulationController(BaseModel):
-    """Controls and manages the cell simulation."""
+    """Controls and manages the cell simulation.
+    
+    TODO: explain the logic + add example of usage
+    """
+    
+    model_config = ConfigDict(validate_default=True, arbitrary_types_allowed=True)
 
     config: SimulationConfig
     state: SimulationState = Field(default=SimulationState.INITIALIZED)
@@ -58,18 +81,18 @@ class SimulationController(BaseModel):
 
     # Tracking and analysis
     events: list[SimulationEvent] = Field(default_factory=list)
-    snapshots: dict[int, dict] = Field(default_factory=dict)
-    statistics: dict[str, list[float]] = Field(default_factory=dict)
-    performance_metrics: dict[str, list[float]] = Field(default_factory=dict)
-
-    class Config:
-        arbitrary_types_allowed = True
+    snapshots: dict[int, dict] = Field(default_factory=dict) # TODO: define a type (e.g., `TypedDict`)
+    statistics: dict[str, list[float]] = Field(default_factory=dict) # TODO: define a type (e.g., `TypedDict`)
+    performance_metrics: dict[str, list[float]] = Field(default_factory=dict) # TODO: define a type (e.g., `TypedDict`)
 
     def __init__(self, **data):
         """Initialize simulation components."""
         super().__init__(**data)
         self._initialize_simulation()
 
+    # FC: very good use of context managers, but a bit of an overkill IMHO
+    # In other terms: does this give us a huge advantage over some simpler implementation?
+    # I am happy to hear your thoughts on this, maybe I am missing something.
     @contextmanager
     def _state_transition(self, new_state: SimulationState):
         """Safely manage state transitions."""
@@ -86,6 +109,7 @@ class SimulationController(BaseModel):
             self._log_event('state_transition_error', {'error': str(e)}, [])
             raise
 
+    # TODO: make this a separate type
     def _validate_state_transition(self, from_state: SimulationState, to_state: SimulationState) -> bool:
         """Validate state transitions."""
         valid_transitions = {
@@ -109,12 +133,15 @@ class SimulationController(BaseModel):
             )
 
             # Initialize update coordinator
+            # TODO: is this guy used anywhere else?
             self.update_coordinator = UpdateCoordinator(
                 space=self.space,
                 time_step=self.config.time_step
             )
 
             # Create initial sample with clusters
+            # TODO: give user the chance to pass a sample defined outside of this model
+            # TODO: use more data from config
             self.sample = Sample.create_random_sample(
                 space=self.space,
                 n_clusters=self.config.initial_clusters,
@@ -135,8 +162,11 @@ class SimulationController(BaseModel):
             logger.error(f"Simulation initialization failed: {str(e)}")
             raise RuntimeError(f"Simulation initialization failed: {str(e)}")
 
+    # FC: this method is a bit of a duplicate of the actual simulation objects, indeed
+    # `Sample`, `Cluster`, `Nucleus` and `Space` all have these stats.
     def _initialize_statistics(self):
         """Initialize statistical tracking."""
+        # TODO: make this a dataclass for serialization
         self.statistics = {
             'time': [],
             'total_nuclei': [],
@@ -150,6 +180,7 @@ class SimulationController(BaseModel):
 
     def _initialize_performance_metrics(self):
         """Initialize performance monitoring."""
+        # TODO: make this a dataclass for serialization
         if self.config.performance_monitoring:
             self.performance_metrics = {
                 'step_time': [],
@@ -205,7 +236,7 @@ class SimulationController(BaseModel):
             }
             self._manage_snapshots()
 
-    def _log_event(self, event_type: str, details: Dict[str, Any], entities: List[int]):
+    def _log_event(self, event_type: str, details: dict[str, Any], entities: list[int]):
         """Log a simulation event."""
         event = SimulationEvent(
             timestamp=self.current_time,
@@ -216,7 +247,7 @@ class SimulationController(BaseModel):
         self.events.append(event)
         logger.debug(str(event))
 
-    def step(self) -> bool:
+    def step(self) -> bool: # TODO: why do we need to return a boolean?
         """Perform a single simulation step."""
         try:
             if self.state not in (SimulationState.INITIALIZED, SimulationState.RUNNING):
@@ -251,13 +282,13 @@ class SimulationController(BaseModel):
             logger.error(f"Step error at time {self.current_time}: {str(e)}")
             return False
 
-    def run(self, duration: Optional[int] = None) -> bool:
+    def run(self, duration: Optional[int] = None) -> bool: # TODO: why boolean?
         """Run simulation for specified duration."""
         steps = duration or (self.config.duration - int(self.current_time))
 
         try:
             for step in range(steps):
-                if not self.step():
+                if not self.step(): # not clean IMO
                     return False
 
                 if self.sample.count == 0:
@@ -284,6 +315,9 @@ class SimulationController(BaseModel):
             logger.error(f"Run error: {str(e)}")
             return False
 
+    # TODO: In which use case would you need to pause and resume a simulation?
+    # And how would you call this from the API? (I guess you primarily use the `run` method,
+    # which internally calls `step`. This `pause` seems to me more at the `step` level.)
     def pause(self):
         """Pause the simulation."""
         if self.state == SimulationState.RUNNING:
@@ -294,6 +328,7 @@ class SimulationController(BaseModel):
                     []
                 )
 
+    # see `pause`
     def resume(self):
         """Resume the simulation."""
         if self.state == SimulationState.PAUSED:
@@ -304,6 +339,7 @@ class SimulationController(BaseModel):
                     []
                 )
 
+    # use case for this? let's discuss
     def reset(self):
         """Reset simulation to initial state."""
         with self._state_transition(SimulationState.INITIALIZED):
@@ -315,6 +351,7 @@ class SimulationController(BaseModel):
                 []
             )
 
+    # use case for this? let's discuss
     def cleanup(self):
         """Clean up resources when simulation ends."""
         try:
@@ -331,28 +368,31 @@ class SimulationController(BaseModel):
             logger.error(f"Cleanup error: {str(e)}")
             self._log_event('cleanup_error', {'error': str(e)}, [])
 
-    def get_statistics(self) -> Dict[str, List[float]]:
+    def get_statistics(self) -> dict[str, list[float]]:
         """Get current simulation statistics."""
         return self.statistics
 
-    def get_events(self, start_time: Optional[float] = None) -> List[SimulationEvent]:
+    def get_events(self, start_time: Optional[float] = None) -> list[SimulationEvent]:
         """Get events, optionally filtered by start time."""
         if start_time is None:
             return self.events
         return [e for e in self.events if e.timestamp >= start_time]
 
-    def get_snapshot(self, time: Optional[int] = None) -> Dict:
+    def get_snapshot(self, time: Optional[int] = None) -> dict:
         """Get simulation snapshot at specified time."""
         if time is None:
             time = int(self.current_time)
         return self.snapshots.get(time, {})
 
-    def get_performance_metrics(self) -> Dict[str, List[float]]:
+    def get_performance_metrics(self) -> dict[str, list[float]]:
         """Get performance metrics if monitoring is enabled."""
         if not self.config.performance_monitoring:
             return {}
         return self.performance_metrics
 
+    # FC: uh, maybe now I see why you used all the context manager above.
+    # Let's discuss this. I think this functionality has some potential.
+    # Anyway, can't you more easily just take the previous snapshot and restore it?
     def attempt_recovery(self) -> bool:
         """Attempt to recover from error state."""
         if self.state == SimulationState.ERROR:
@@ -376,7 +416,8 @@ class SimulationController(BaseModel):
                 return False
         return False
 
-    def get_state_summary(self) -> Dict[str, Any]:
+    # TODO: make this a type
+    def get_state_summary(self) -> dict[str, Any]:
         """Get a summary of current simulation state."""
         return {
             'state': self.state.name,
@@ -392,6 +433,7 @@ class SimulationController(BaseModel):
             } if self.config.performance_monitoring else {}
         }
 
+    # TODO: make this a model validator since we are using pydantic?
     def validate_state(self) -> bool:
         """Validate current simulation state."""
         try:
@@ -418,7 +460,7 @@ class SimulationController(BaseModel):
             logger.error(f"State validation error: {str(e)}")
             return False
 
-    def export_data(self, format: str = 'dict') -> Dict[str, Any]:
+    def export_data(self, format: str = 'dict') -> dict[str, Any]:
         """Export simulation data in specified format."""
         data = {
             'config': self.config.model_dump(),

@@ -1,6 +1,6 @@
-from typing import List, Tuple, Dict, Set, Optional
+from typing import Optional
 import numpy as np
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field
 from dataclasses import dataclass
 
 from cellgroup.synthetic.nucleus import Nucleus
@@ -12,10 +12,23 @@ EPSILON = 1e-10  # Small number for float comparisons
 MAX_SINGLE_DISPLACEMENT = 10.0  # Maximum displacement per iteration
 MIN_SEPARATION = 0.1  # Minimum separation to maintain between nuclei
 
+# GENERAL COMMENTS
+# - I kind of disagree with the use of try except blocks in the methods,
+#   it just hides the error and raises a new one with less information.
+#   Makes it harder to debug. I would remove them.
+# - I like the way you implemented the method (I need some more time and
+#   explanations to understand it better). However, I have a practical doubt:
+#   + You're solving an optimization problem iteratively (see line 310).
+#     Therefore, there's no guarantee that the solution will not present
+#     any overlaping nuclei.
+# - I would also implement a simpler bounding-box based method and let the
+#   user choose between the two methods. This would be useful for large
+#   simulations where speed is more important than accuracy.
 
-@dataclass
+@dataclass # TODO: TypedDict (?)
 class CollisionPair:
     """Represents a collision between two nuclei."""
+    # TODO: add description to attributes
     nucleus1_id: int
     nucleus2_id: int
     overlap_distance: float
@@ -29,7 +42,15 @@ class CollisionResolver(BaseModel):
     This class implements sophisticated collision detection and resolution for
     ellipsoidal nuclei in both 2D and 3D spaces. It uses iterative resolution
     with adaptive step sizes to ensure stable convergence.
+    
+    # TODO: explain a bit more the parameters and the methods
     """
+    
+    model_config = ConfigDict(
+        validate_assignment=True,
+        validate_default=True,
+        arbitrary_types_allowed = True
+    )
 
     space: Space
     max_iterations: int = Field(default=50, ge=1)
@@ -41,15 +62,12 @@ class CollisionResolver(BaseModel):
     max_displacement_per_step: float = Field(default=MAX_SINGLE_DISPLACEMENT, gt=0.0)
     min_separation: float = Field(default=MIN_SEPARATION, gt=0.0)
 
-    class Config:
-        arbitrary_types_allowed = True
-
     def _transform_to_unit_sphere(
-            self,
-            point: np.ndarray,
-            center: np.ndarray,
-            semi_axes: np.ndarray,
-            rotation_matrix: np.ndarray
+        self,
+        point: np.ndarray,
+        center: np.ndarray,
+        semi_axes: np.ndarray,
+        rotation_matrix: np.ndarray
     ) -> np.ndarray:
         """Transform a point to unit sphere space for an ellipsoid."""
         try:
@@ -70,21 +88,25 @@ class CollisionResolver(BaseModel):
         except Exception as e:
             raise ValueError(f"Failed to transform point: {e}")
 
+    # FC: can you give me ore hints about how this work?
     def _get_closest_point_on_ellipsoid(
-            self,
-            point: np.ndarray,
-            nucleus: Nucleus,
-            max_iterations: int = 10
-    ) -> Tuple[np.ndarray, float]:
+        self,
+        point: np.ndarray,
+        nucleus: Nucleus,
+        max_iterations: int = 10
+    ) -> tuple[np.ndarray, float]:
         """Find the closest point on an ellipsoid surface to a given point.
 
         Uses Newton-Raphson iteration for accurate convergence.
 
         Returns
         -------
-        Tuple[np.ndarray, float]
+        tuple[np.ndarray, float]
             Closest point and distance to surface
         """
+        # TODO: pretty good idea! We might want to trade-off accuracy for speed
+        # using bounding boxes and a simpler algorithm (or at least give the
+        # user the possibility to choose)
         center = np.array(nucleus.centroid)
         semi_axes = np.array(nucleus.semi_axes)
         rotation = nucleus._get_rotation_matrix()
@@ -129,13 +151,14 @@ class CollisionResolver(BaseModel):
         return surface_point, np.linalg.norm(point - surface_point)
 
     def detect_overlap(
-            self,
-            nucleus1: Nucleus,
-            nucleus2: Nucleus
+        self,
+        nucleus1: Nucleus,
+        nucleus2: Nucleus
     ) -> Optional[CollisionPair]:
         """Check if two nuclei overlap and calculate collision parameters."""
         try:
             # Verify dimensionality
+            # NOTE: I think this is already done in the Sample class
             if len(nucleus1.centroid) != len(nucleus2.centroid):
                 raise ValueError("Nuclei must have same dimensionality")
 
@@ -189,11 +212,11 @@ class CollisionResolver(BaseModel):
             raise ValueError(f"Collision detection failed: {e}")
 
     def _calculate_displacement(
-            self,
-            collision: CollisionPair,
-            nucleus1: Nucleus,
-            nucleus2: Nucleus
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        self,
+        collision: CollisionPair,
+        nucleus1: Nucleus,
+        nucleus2: Nucleus
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Calculate displacement vectors to resolve a collision."""
         try:
             # Handle zero displacement vector
@@ -203,6 +226,7 @@ class CollisionResolver(BaseModel):
                 direction = collision.collision_normal
 
             # Calculate mass-weighted displacement
+            # TODO: use `size` attr 
             mass1 = np.prod(nucleus1.semi_axes)
             mass2 = np.prod(nucleus2.semi_axes)
             total_mass = mass1 + mass2
@@ -236,10 +260,10 @@ class CollisionResolver(BaseModel):
             raise ValueError(f"Displacement calculation failed: {e}")
 
     def _apply_displacement(
-            self,
-            nucleus: Nucleus,
-            displacement: np.ndarray,
-            spatial_grid: Optional[SpatialGrid] = None
+        self,
+        nucleus: Nucleus,
+        displacement: np.ndarray,
+        spatial_grid: Optional[SpatialGrid] = None
     ) -> None:
         """Apply displacement to nucleus while respecting space bounds."""
         try:
@@ -268,9 +292,9 @@ class CollisionResolver(BaseModel):
             raise ValueError(f"Failed to apply displacement: {e}")
 
     def resolve_overlaps(
-            self,
-            nuclei: List[Nucleus],
-            spatial_grid: SpatialGrid
+        self,
+        nuclei: list[Nucleus],
+        spatial_grid: SpatialGrid
     ) -> bool:
         """Resolve all overlaps between nuclei."""
         if not nuclei:
@@ -288,7 +312,7 @@ class CollisionResolver(BaseModel):
                 displacements = {n.idx: np.zeros_like(n.centroid) for n in nuclei}
 
                 # Detect all collisions
-                collisions = []
+                collisions: list[CollisionPair] = []
                 for nucleus in nuclei:
                     potential_collisions = spatial_grid.get_potential_collisions(nucleus)
 
