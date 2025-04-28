@@ -27,7 +27,7 @@ from typing import Any, Optional
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
-from cellgroup.configs import SimulationConfig
+from cellgroup.configs.synthetic import SimulationConfig
 from cellgroup.synthetic.sample import Sample
 from cellgroup.synthetic.space import Space
 from cellgroup.synthetic.physics.update import UpdateCoordinator
